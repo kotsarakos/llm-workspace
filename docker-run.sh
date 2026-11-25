@@ -1,30 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build and run the Open WebUI Docker container locally.
+# Build llm-workspace from source and run it on http://localhost:3000,
+# connected to the Ollama server running on this machine.
 
-readonly IMAGE="open-webui"
-readonly CONTAINER="open-webui"
-readonly HOST_PORT="${OPEN_WEBUI_PORT:-3000}"
-readonly CONTAINER_PORT=8080
+readonly IMAGE="llm-workspace"
+readonly CONTAINER="llm-workspace"
+readonly HOST_PORT="${LLM_WORKSPACE_PORT:-3000}"
+readonly OLLAMA_URL="${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
 
 echo "Building ${IMAGE} image..."
 docker build -t "$IMAGE" .
 
-echo "Stopping any existing ${CONTAINER} container..."
-docker stop "$CONTAINER" 2>/dev/null || true
-docker rm "$CONTAINER" 2>/dev/null || true
+echo "Replacing any existing ${CONTAINER} container..."
+docker rm -f "$CONTAINER" 2>/dev/null || true
 
-echo "Starting ${CONTAINER}..."
+echo "Starting ${CONTAINER} (localhost only)..."
 docker run -d \
-  -p "${HOST_PORT}:${CONTAINER_PORT}" \
-  --add-host=host.docker.internal:host-gateway \
-  -v "${IMAGE}:/app/backend/data" \
   --name "$CONTAINER" \
-  --restart always \
+  -p "127.0.0.1:${HOST_PORT}:8080" \
+  -v llm-workspace-data:/app/backend/data \
+  -e OLLAMA_BASE_URL="$OLLAMA_URL" \
+  --add-host host.docker.internal:host-gateway \
+  --restart unless-stopped \
   "$IMAGE"
 
-echo "Cleaning up dangling images..."
-docker image prune -f
-
-echo "Open WebUI is running at http://localhost:${HOST_PORT}"
+echo "llm-workspace is starting at http://localhost:${HOST_PORT}"
