@@ -1,0 +1,104 @@
+<script>
+	import Sortable from 'sortablejs';
+
+	import { onMount, getContext, tick } from 'svelte';
+
+	import { chatId, mobile, pinnedNotes, settings, showSidebar } from '$lib/stores';
+	import { updateUserSettings } from '$lib/apis/users';
+	import { getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
+	import NotesIcon from './icons/Notes.svelte';
+	import XMarkIcon from './icons/XMark.svelte';
+	import Tooltip from '$lib/components/common/Tooltip.svelte';
+
+	const i18n = getContext('i18n');
+
+	export let selectedChatId = null;
+
+	$: sortedPinnedNotes = (() => {
+		const order = $settings?.pinnedNotesOrder;
+		if (!order || order.length === 0) return $pinnedNotes;
+		const orderMap = new Map(order.map((id, idx) => [id, idx]));
+		return [...$pinnedNotes].sort((a, b) => {
+			const aIdx = orderMap.has(a.id) ? orderMap.get(a.id) : Infinity;
+			const bIdx = orderMap.has(b.id) ? orderMap.get(b.id) : Infinity;
+			return aIdx - bIdx;
+		});
+	})();
+
+	const initPinnedNotesSortable = () => {
+		const pinnedNotesList = document.getElementById('pinned-notes-list');
+		if (pinnedNotesList && !$mobile) {
+			new Sortable(pinnedNotesList, {
+				animation: 150,
+				setData: function (dataTransfer, dragEl) {
+					dataTransfer.setData(
+						'text/plain',
+						JSON.stringify({
+							type: 'note',
+							id: dragEl.dataset.id
+						})
+					);
+					dataTransfer.setData('application/x-open-webui-drag', '');
+				},
+				onUpdate: async (event) => {
+					const noteId = event.item.dataset.id;
+					const newIndex = event.newIndex;
+					const current = sortedPinnedNotes.map((n) => n.id);
+					const oldIndex = current.indexOf(noteId);
+					current.splice(oldIndex, 1);
+					current.splice(newIndex, 0, noteId);
+					settings.set({ ...$settings, pinnedNotesOrder: current });
+					await updateUserSettings(localStorage.token, { ui: { pinnedNotesOrder: current } });
+				}
+			});
+		}
+	};
+
+	onMount(async () => {
+		await tick();
+		initPinnedNotesSortable();
+	});
+</script>
+
+<div class="mt-0.5 pb-1.5" id="pinned-notes-list">
+	{#each sortedPinnedNotes as note (note.id)}
+		<!-- svelte-ignore a11y-no-static-element-interactions -->
+		<div
+			class="flex items-center text-base-800 dark:text-base-200 cursor-grab relative group rounded-xl px-2 py-1.5 hover:bg-base-100 dark:hover:bg-base-900 transition"
+			data-id={note.id}
+		>
+			<a
+				class="grow flex items-center gap-2.5 text-[0.8125rem] leading-5"
+				href={`/notes/${note.id}`}
+				on:click={() => {
+					selectedChatId = null;
+					chatId.set('');
+					if ($mobile) {
+						showSidebar.set(false);
+					}
+				}}
+				draggable="true"
+			>
+				<div class="self-center">
+					<NotesIcon className="size-3.5" strokeWidth="1.5" />
+				</div>
+				<div class="flex-1 text-ellipsis line-clamp-1">
+					{note.title}
+				</div>
+			</a>
+			<Tooltip content={$i18n.t('Unpin')} className="flex items-center">
+				<button
+					class="hover-reveal self-center py-0.5 rounded-lg transition hover:text-base-900 dark:hover:text-base-100 text-base-500 dark:text-base-400 px-0"
+					on:click|preventDefault|stopPropagation={async () => {
+						await toggleNotePinnedStatusById(localStorage.token, note.id);
+						const _pinnedNotes = await getPinnedNoteList(localStorage.token).catch(() => []);
+						pinnedNotes.set(_pinnedNotes);
+					}}
+					aria-label={$i18n.t('Unpin')}
+				>
+					<XMarkIcon className="size-3.5" strokeWidth="1.5" />
+				</button>
+			</Tooltip>
+		</div>
+	{/each}
+</div>

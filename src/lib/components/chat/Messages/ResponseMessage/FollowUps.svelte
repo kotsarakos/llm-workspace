@@ -1,0 +1,35 @@
+<script lang="ts">
+	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import { onMount, tick, getContext } from 'svelte';
+
+	const i18n = getContext('i18n');
+
+	export let followUps: string[] = [];
+	export let onClick: (followUp: string) => void = () => {};
+</script>
+
+<div class="mt-4">
+	<div class="text-sm font-normal">
+		{$i18n.t('Follow up')}
+	</div>
+
+	<div class="flex flex-col text-left gap-1 mt-1.5">
+		{#each followUps as followUp, idx (idx)}
+			<Tooltip content={followUp} placement="top-start" className="line-clamp-1">
+				<button
+					class=" py-1 bg-transparent text-left text-sm flex items-center gap-2 text-base-500 dark:text-base-400 hover:text-base-1000 dark:hover:text-base-0 transition cursor-pointer w-full"
+					on:click={() => onClick(followUp)}
+					aria-label={$i18n.t('Follow up: {{question}}', { question: followUp })}
+				>
+					<div class="line-clamp-1">
+						{followUp}
+					</div>
+				</button>
+			</Tooltip>
+
+			{#if idx < followUps.length - 1}
+				<hr class="border-base-50 dark:border-base-850/30" />
+			{/if}
+		{/each}
+	</div>
+</div>

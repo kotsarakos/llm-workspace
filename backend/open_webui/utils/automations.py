@@ -1,0 +1,825 @@
+"""
+Automation utilities and unified scheduler.
+
+RRULE helpers, scheduler worker loop, and execution logic.
+Follows the utils/<feature>.py pattern (cf. utils/channels.py, utils/task.py).
+
+The scheduler_worker_loop handles all time-based background work:
+  - Automation execution (claim_due → execute)
+  - Calendar event alerts (upcoming events → socket + webhook notifications)
+  - One-shot chat timers
+
+Environment:
+    SCHEDULER_POLL_INTERVAL             – seconds between polls (default: 10)
+    TIMER_POLL_INTERVAL                 – seconds between timer polls (default: 1)
+    CALENDAR_ALERT_LOOKAHEAD_MINUTES   – default alert window (default: 5)
+"""
+
+import asyncio
+import copy
+import logging
+import os
+import random
+import time
+from datetime import timedelta
+from typing import Optional
+from uuid import uuid4
+
+from fastapi import HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials
+from open_webui.utils.machines import automation_machine_of, machine_id_of
+from open_webui.constants import ERROR_MESSAGES
+from open_webui.events import EVENTS, build_event, publish_event
+from open_webui.internal.db import get_async_db
+from open_webui.models.automations import AutomationModel, AutomationRuns, Automations
+from open_webui.models.chats import ChatForm, Chats
+from open_webui.models.config import Config
+from open_webui.models.folders import Folders
+from open_webui.utils.access_control.folders import has_folder_write_access
+from open_webui.models.messages import MessageForm
+from open_webui.models.users import Users
+from open_webui.utils.auth import create_token
+from open_webui.utils.misc import parse_duration
+from open_webui.utils.models import get_all_models
+from open_webui.utils.recurrence import (
+    _resolve_tz,
+    next_n_runs_ns,
+    next_run_ns,
+    rrule_interval_seconds,
+    validate_rrule,
+)
+from open_webui.utils.prompt_variables import fill_variables
+from open_webui.utils.task import prompt_template
+from open_webui.utils.agents.discovery import get_models as get_agent_models
+from open_webui.utils.machines import (
+    can_use_machine,
+    get_folder_machine,
+    get_folder_machine_mismatch,
+    initialize_machine_directory,
+    resolve_machine_connection,
+)
+from starlette.datastructures import Headers
+
+log = logging.getLogger(__name__)
+
+SCHEDULER_POLL_INTERVAL = int(os.getenv('SCHEDULER_POLL_INTERVAL', os.getenv('AUTOMATION_POLL_INTERVAL', '10')))
+TIMER_POLL_INTERVAL = int(os.getenv('TIMER_POLL_INTERVAL', '1'))
+CALENDAR_ALERT_LOOKAHEAD_MINUTES = int(os.getenv('CALENDAR_ALERT_LOOKAHEAD_MINUTES', '10'))
+
+
+# Schedule
+
+
+async def schedule_next_run(data: dict, tz: str = None) -> Optional[int]:
+    return await next_run_ns(data['rrule'], tz=tz) if data.get('rrule') else None
+
+
+async def schedule_next_runs(data: dict, tz: str = None) -> list[int]:
+    return await next_n_runs_ns(data['rrule'], tz=tz) if data.get('rrule') else []
+
+
+# Worker Loop
+
+
+# Keep the old name as an alias so any stale imports still work.
+async def automation_worker_loop(app) -> None:
+    """Deprecated alias — use scheduler_worker_loop."""
+    await scheduler_worker_loop(app)
+
+
+async def scheduler_worker_loop(app) -> None:
+    """Unified background scheduler for all time-based work.
+
+    Handles:
+      1. Automation execution  (ENABLE_AUTOMATIONS)
+      2. Calendar event alerts (ENABLE_CALENDAR)
+
+    Runs on every instance. Poll interval is configurable via
+    SCHEDULER_POLL_INTERVAL env var (default: 10 seconds).
+    """
+    log.info(
+        'Scheduler worker started (timer poll interval: %ss, scheduler poll interval: %ss)',
+        TIMER_POLL_INTERVAL,
+        SCHEDULER_POLL_INTERVAL,
+    )
+    next_scheduler_poll = 0.0
+
+    while True:
+        try:
+            now = time.monotonic()
+            # Timers
+            try:
+                from open_webui.utils.timers import claim_due_timers, execute_due_timer
+
+                for timer_id, claim_id in await claim_due_timers(int(time.time_ns()), limit=10):
+                    asyncio.create_task(execute_due_timer(app, timer_id, claim_id))
+            except Exception:
+                log.exception('Scheduler: timer error')
+
+            if now < next_scheduler_poll:
+                await asyncio.sleep(max(1, TIMER_POLL_INTERVAL))
+                continue
+            # Jitter to spread automation/calendar load across instances; timers keep a tight poll.
+            next_scheduler_poll = now + SCHEDULER_POLL_INTERVAL + random.uniform(0, 2)
+
+            # Automations
+            if await Config.get('automations.enable'):
+                try:
+                    async with get_async_db() as db:
+                        batch = await Automations.claim_due(int(time.time_ns()), limit=10, db=db)
+                    if batch:
+                        log.info('Claimed %s due automation(s)', len(batch))
+                    for automation in batch:
+                        asyncio.create_task(execute_automation(app, automation))
+                except Exception:
+                    log.exception('Scheduler: automation error')
+
+            # Calendar alerts
+            if await Config.get('calendar.enable'):
+                try:
+                    await _check_calendar_alerts(app)
+                except Exception:
+                    log.exception('Scheduler: calendar alert error')
+
+        except Exception:
+            log.exception('Scheduler worker error')
+
+        await asyncio.sleep(max(1, TIMER_POLL_INTERVAL))
+
+
+# Execute
+
+
+def _build_request(
+    app,
+    token: Optional[str] = None,
+) -> Request:
+    """Build a minimal ASGI Request for chat_completion.
+
+    Mirrors the mock-request pattern used in main.py lifespan
+    (model pre-fetch, tool server init) for consistency.
+
+    When token is provided, attach it as
+    request.state.token so session-auth tool servers and terminals can
+    authenticate headless scheduled runs as the automation owner.
+    """
+    scope = {
+        'type': 'http',
+        'asgi': {'version': '3.0', 'spec_version': '2.0'},
+        'method': 'POST',
+        'path': '/api/v1/automations/internal',
+        'query_string': b'',
+        'headers': Headers({}).raw,
+        'client': ('', 0),
+        'server': ('127.0.0.1', 80),
+        'scheme': 'http',
+        'app': app,
+    }
+    request = Request(scope)
+    # Ensure request.state is initialized with required attributes
+    request.state.token = HTTPAuthorizationCredentials(scheme='Bearer', credentials=token) if token else None
+    request.state.enable_api_keys = False
+    return request
+
+
+async def _resolve_model_defaults(app, model_id: str) -> dict:
+    models = getattr(app.state, 'MODELS', {})
+    model = models.get(model_id, {})
+    meta = model.get('info', {}).get('meta', {})
+
+    defaults = {
+        'tool_ids': list(meta.get('toolIds') or []),
+        'filter_ids': list(meta.get('defaultFilterIds') or []),
+        'machine_id': machine_id_of(meta, 'machineId'),
+    }
+    defaults = {key: value for key, value in defaults.items() if value}
+    default_feature_ids = meta.get('defaultFeatureIds', [])
+    if not default_feature_ids:
+        return defaults
+
+    capabilities = meta.get('capabilities') or {}
+    features = {}
+
+    # code_interpreter is excluded: it requires the frontend event emitter
+    # and does not work in headless backend execution.
+    feature_checks = {
+        'web_search': await Config.get('web.search.enable'),
+        'image_generation': await Config.get('image_generation.enable'),
+        'video_generation': await Config.get('video_generation.enable'),
+    }
+
+    for feature_id in default_feature_ids:
+        if feature_id in feature_checks:
+            # Feature must be: in defaultFeatureIds + capability enabled + admin enabled
+            if capabilities.get(feature_id) and feature_checks[feature_id]:
+                features[feature_id] = True
+
+    if features:
+        defaults['features'] = features
+    return defaults
+
+
+async def validate_automation_machine(request, user, data: dict, automation_id: str | None = None):
+    machine = automation_machine_of(data)
+    model_id = data['model_id']
+    is_agent = model_id.startswith('agent:')
+    if not machine.get('server_id'):
+        if is_agent:
+            raise HTTPException(400, 'Select a machine for the agent.')
+        return
+    if machine['server_id'].startswith('template:'):
+        from open_webui.utils.machines import template_connection, require_model_access
+
+        _, template = await template_connection(user, machine['server_id'])
+        scope = (template.get('data') or {}).get('scope')
+        if (data.get('target') or {}).get('type') == 'channel' and (is_agent or scope == 'chat'):
+            raise HTTPException(400, 'This machine requires a chat destination.')
+        if scope == 'model':
+            await require_model_access(user, model_id, machine['server_id'], request)
+        return
+    metadata = {'machine_id': machine['server_id'], 'model_id': model_id}
+    if automation_id:
+        metadata['automation_id'] = automation_id
+    if not await resolve_machine_connection(request, user, metadata):
+        raise HTTPException(400, 'The configured machine is unavailable for this automation.')
+    if is_agent:
+        if (data.get('target') or {}).get('type') == 'channel':
+            raise HTTPException(400, 'Agent automations require a chat destination.')
+        available = await get_agent_models(request, user, metadata, cwd=machine.get('cwd'))
+        if not any(model['id'] == model_id for model in available):
+            raise HTTPException(400, 'Agent model is unavailable on the configured machine.')
+
+
+async def _execute_channel_automation(
+    app,
+    automation: AutomationModel,
+    user,
+    prompt: str,
+    model_id: str,
+    token: str,
+) -> None:
+    target = automation.data.get('target') or {}
+    channel_id = target.get('channel_id')
+    if not channel_id or not await Config.get('channels.enable'):
+        raise ValueError('Channel not found')
+
+    from open_webui.utils.access_control import has_permission
+
+    if user.role != 'admin' and not await has_permission(
+        user.id, 'features.channels', await Config.get('user.permissions')
+    ):
+        raise ValueError('Owner no longer permitted to use channels')
+
+    model = getattr(app.state, 'MODELS', {}).get(model_id, {})
+    request = _build_request(app, token=token)
+
+    from open_webui.models.messages import Messages
+    from open_webui.routers.channels import new_message_handler
+
+    # An ongoing thread gets this run as a reply; the first run, or a run after the thread was deleted, starts it.
+    ongoing = target.get('new_thread', True) is False
+    thread_id = None
+    if ongoing and target.get('thread_id'):
+        root = await Messages.get_message_by_id(target['thread_id'], include_thread_replies=False)
+        if root and root.channel_id == channel_id and not root.parent_id:
+            thread_id = root.id
+
+    async with get_async_db() as db:
+        user_message, channel = await new_message_handler(
+            request,
+            channel_id,
+            MessageForm(
+                parent_id=thread_id,
+                content=prompt,
+                data={},
+                meta={'automation_id': automation.id},
+            ),
+            user,
+            db,
+        )
+        if ongoing and not thread_id:
+            await Automations.set_target_ref(automation.id, 'thread_id', user_message.id)
+        reply_in_thread = ongoing or target.get('reply_in_thread', True) is not False
+        response_parent_id = user_message.parent_id or (user_message.id if reply_in_thread else None)
+        # Earlier runs and anyone's replies in the thread, oldest first, so this run continues from them.
+        thread_history = []
+        if thread_id:
+            earlier = (await Messages.get_messages_by_parent_id(channel.id, thread_id, db=db))[::-1]
+            names = {u.id: u.name for u in await Users.get_users_by_user_ids(list({m.user_id for m in earlier}), db=db)}
+            for message in earlier:
+                if message.id == user_message.id or not message.content:
+                    continue
+                message_model_id = (message.meta or {}).get('model_id')
+                name = (
+                    getattr(app.state, 'MODELS', {}).get(message_model_id, {}).get('name', message_model_id)
+                    if message_model_id
+                    else names.get(message.user_id, 'Unknown')
+                )
+                thread_history.append(f'{name}: {message.content}')
+        assistant_message, channel = await new_message_handler(
+            request,
+            channel.id,
+            MessageForm(
+                parent_id=response_parent_id,
+                content='',
+                data={},
+                meta={
+                    'automation_id': automation.id,
+                    'model_id': model_id,
+                    'model_name': model.get('name', model_id),
+                },
+            ),
+            user,
+            db,
+        )
+
+    form_data = {
+        **await _resolve_model_defaults(app, model_id),
+        'model': model_id,
+        'messages': [
+            {
+                'role': 'system',
+                'content': f'You are {model.get("name", model_id)}, participating in a channel conversation. Be concise and conversational.'
+                + ("\n\nHere's the thread so far:\n\n" + '\n\n'.join(thread_history) if thread_history else ''),
+            },
+            {'role': 'user', 'content': f'{user.name if user else "User"}: {prompt}'},
+        ],
+        'stream': True,
+        'chat_id': f'channel:{channel.id}',
+        'id': assistant_message.id,
+        'session_id': f'channel:{channel.id}',
+        'automation_id': automation.id,
+        'background_tasks': {},
+    }
+    machine = automation_machine_of(automation.data)
+    if machine.get('server_id'):
+        form_data['machine_id'] = machine['server_id']
+        await initialize_machine_directory(
+            request,
+            user,
+            {'chat_id': form_data['chat_id'], 'automation_id': automation.id, 'model_id': model_id},
+            machine['server_id'],
+            machine.get('cwd'),
+        )
+    await app.state.CHAT_COMPLETION_HANDLER(request, form_data, user=user)
+
+    from open_webui.socket.main import sio
+
+    await sio.emit(
+        'automation:result',
+        {
+            'automation_id': automation.id,
+            'name': automation.name,
+            'chat_id': f'channel:{channel.id}',
+            'message_id': assistant_message.id,
+            'status': 'success',
+        },
+        room=f'user:{automation.user_id}',
+    )
+
+    await _record_run(request, automation.id, 'success', chat_id=f'channel:{channel.id}')
+    await publish_event(
+        request,
+        EVENTS.AUTOMATION_RUN_COMPLETED,
+        actor=user,
+        subject_id=automation.id,
+        data={'name': automation.name, 'channel_id': channel.id, 'message_id': assistant_message.id},
+    )
+
+
+_run_semaphore: asyncio.Semaphore | None = None
+
+
+async def execute_automation(app, automation: AutomationModel, variables: Optional[dict] = None) -> None:
+    global _run_semaphore
+    max_concurrent = await Config.get('automations.max_concurrent')
+    if not max_concurrent:
+        return await _execute_automation(app, automation, variables)
+    if _run_semaphore is None:
+        _run_semaphore = asyncio.Semaphore(int(max_concurrent))
+    async with _run_semaphore:
+        await _execute_automation(app, automation, variables)
+
+
+async def _execute_automation(app, automation: AutomationModel, variables: Optional[dict] = None) -> None:
+    """Execute an automation through the full chat completion pipeline.
+
+    Creates a real chat or channel message, then calls chat_completion exactly like the frontend:
+    session_id + chat_id + message_id → async task → pipeline handles everything
+    (filters, model params, knowledge/RAG, tools, DB saves, webhooks).
+    """
+    chat = None
+    request = _build_request(app)
+    try:
+        user = await Users.get_user_by_id(automation.user_id)
+        if not user:
+            await _record_run(request, automation.id, 'error', error='User not found')
+            return
+
+        # Re-gate the rehydrated owner: a demoted/deactivated or de-permissioned owner must not run.
+        from open_webui.utils.access_control import has_permission
+
+        if user.role not in ('user', 'admin') or (
+            user.role != 'admin'
+            and not await has_permission(user.id, 'features.automations', await Config.get('user.permissions'))
+        ):
+            error = 'Owner no longer permitted to run automations'
+            await _record_run(request, automation.id, 'error', error=error, actor=user)
+            return
+
+        prompt = fill_variables(await prompt_template(automation.data['prompt'], user), variables, strict=False)
+        model_id = automation.data['model_id']
+        try:
+            expires_delta = parse_duration(str(await Config.get('automations.auth_token_expires_in', '1h')))
+        except ValueError:
+            expires_delta = None
+        from open_webui.models.auths import Auths
+
+        auth = await Auths.get_auth_by_id(user.id)
+        if auth is None or not auth.active:
+            raise ValueError('Automation owner is no longer active')
+        token = create_token(
+            data={'id': user.id, 'typ': 'automation', 'session_stamp': auth.session_stamp},
+            expires_delta=expires_delta or timedelta(hours=1),
+        )
+
+        if not app.state.MODELS:
+            await get_all_models(_build_request(app, token=token), user=user)
+
+        request = _build_request(app, token=token)
+        await validate_automation_machine(request, user, automation.data, automation.id)
+
+        target = automation.data.get('target') or {}
+        if target.get('type') == 'channel':
+            await _execute_channel_automation(app, automation, user, prompt, model_id, token)
+            return
+
+        # Runs land in the automation's folder while its creator can still write there.
+        folder_id = automation.folder_id
+        if folder_id and not await has_folder_write_access(automation.user_id, folder_id):
+            await Automations.clear_folder_ids(automation.user_id, [folder_id])
+            folder_id = None
+
+        # Generate proper UUIDs for messages (same as frontend)
+        user_msg_id = str(uuid4())
+        assistant_msg_id = str(uuid4())
+        parent_id = None
+        defaults = await _resolve_model_defaults(app, model_id)
+        machine = automation_machine_of(automation.data)
+        if folder_id and await get_folder_machine_mismatch(folder_id, machine.get('server_id')):
+            folder_machine = await get_folder_machine(folder_id)
+            if machine.get('server_id') or await can_use_machine(user, folder_machine['machine_id']):
+                machine = {'server_id': folder_machine['machine_id'], 'cwd': folder_machine['working_directory']}
+        machine_id = machine.get('server_id') or defaults.get('machine_id')
+
+        # An ongoing chat gets this run at its end; the first run, or a run after the chat was deleted, starts it.
+        ongoing = target.get('new_chat', True) is False
+        if ongoing and target.get('chat_id'):
+            from open_webui.utils.subagents import queue_user_message
+
+            current = await Chats.get_chat_by_id_and_user_id(target['chat_id'], automation.user_id)
+            current_id = ((current.chat or {}).get('history') or {}).get('currentId') if current else None
+            # While a reply runs there, the prompt waits in the chat's queue like a message sent meanwhile.
+            if current_id and await queue_user_message(
+                request, current.id, user, {'id': user_msg_id, 'content': prompt}, current_id
+            ):
+                return
+            parent_id = await _append_run_to_chat(
+                app, target['chat_id'], automation, prompt, model_id, machine_id, user_msg_id, assistant_msg_id
+            )
+            if parent_id is not False:
+                chat = await Chats.get_chat_by_id(target['chat_id'])
+        appended = chat is not None
+
+        if chat is None:
+            parent_id = None
+            chat = await _insert_run_chat(
+                automation, folder_id, prompt, model_id, machine_id, user_msg_id, assistant_msg_id
+            )
+            if chat and ongoing:
+                await Automations.set_target_ref(automation.id, 'chat_id', chat.id)
+
+        if not chat:
+            error = 'Failed to create chat'
+            await _record_run(request, automation.id, 'error', error=error, actor=user)
+            return
+
+        # Notify frontend to refresh chat list
+        from open_webui.socket.main import sio
+
+        for event_type in ('chat:list', 'chat:reload') if appended else ('chat:list',):
+            await sio.emit(
+                'events',
+                {'chat_id': chat.id, 'message_id': user_msg_id, 'data': {'type': event_type}},
+                room=f'user:{automation.user_id}',
+            )
+
+        # Build the same payload the frontend sends to /api/chat/completions
+        form_data = {
+            **defaults,
+            'model': model_id,
+            'messages': [{'role': 'user', 'content': prompt}],
+            'stream': True,
+            'chat_id': chat.id,
+            'id': assistant_msg_id,
+            # The pipeline replays an ongoing chat's earlier turns from the saved history.
+            'parent_id': parent_id,
+            'user_message': {
+                'id': user_msg_id,
+                'parentId': parent_id,
+                'role': 'user',
+                'content': prompt,
+            },
+            'session_id': f'automation:{automation.id}',
+            'automation_id': automation.id,
+            'background_tasks': {},
+        }
+        # Match the chat UI's memory preference, including inherited defaults.
+        ui_settings = (user.settings.ui or {}) if user.settings else {}
+        memory = ui_settings.get('memory')
+        if memory is None:
+            defaults = await Config.get('ui.default_interface_settings') or {}
+            memory = defaults.get('memory')
+        if memory is None:
+            memory = await Config.get('memories.enable')
+        if memory:
+            form_data.setdefault('features', {})['memory'] = True
+
+        # Call the full chat completion pipeline (same as POST /api/chat/completions).
+        # The handler reference is stored on app.state to avoid circular imports.
+        request = _build_request(app, token=token)
+        if machine.get('server_id'):
+            form_data['machine_id'] = machine['server_id']
+            await initialize_machine_directory(
+                request,
+                user,
+                {'chat_id': chat.id, 'automation_id': automation.id, 'model_id': model_id},
+                machine['server_id'],
+                machine.get('cwd'),
+            )
+        await app.state.CHAT_COMPLETION_HANDLER(request, form_data, user=user)
+
+        reply = await Chats.get_message_by_id_and_message_id(chat.id, assistant_msg_id)
+        if reply and reply.get('error'):
+            raise ValueError(str(reply['error']['content']))
+        if not reply or not reply.get('done'):
+            raise ValueError('Automation reply did not complete')
+
+        # Notify user
+        from open_webui.socket.main import sio
+
+        await sio.emit(
+            'automation:result',
+            {
+                'automation_id': automation.id,
+                'name': automation.name,
+                'chat_id': chat.id,
+                'status': 'success',
+            },
+            room=f'user:{automation.user_id}',
+        )
+
+        await _record_run(request, automation.id, 'success', chat_id=chat.id)
+        await publish_event(
+            request,
+            EVENTS.AUTOMATION_RUN_COMPLETED,
+            actor=user,
+            subject_id=automation.id,
+            data={'name': automation.name, 'chat_id': chat.id},
+        )
+
+    except (Exception, asyncio.CancelledError) as e:
+        log.exception(f'Automation {automation.id} failed')
+        error = 'Automation reply was cancelled' if isinstance(e, asyncio.CancelledError) else str(e)[:4000]
+        await _record_run(request, automation.id, 'error', chat_id=chat.id if chat else None, error=error)
+        if isinstance(e, asyncio.CancelledError):
+            raise
+
+
+# Internals
+
+
+async def _insert_run_chat(
+    automation,
+    folder_id,
+    prompt: str,
+    model_id: str,
+    machine_id: str | None,
+    user_msg_id: str,
+    assistant_msg_id: str,
+):
+    """A new chat holding this run's prompt and its pending reply."""
+    return await Chats.insert_new_chat(
+        str(uuid4()),
+        automation.user_id,
+        ChatForm(
+            folder_id=folder_id,
+            chat={
+                'title': automation.name,
+                'models': [model_id],
+                'machine_id': machine_id,
+                'history': {
+                    'currentId': assistant_msg_id,
+                    'messages': {
+                        user_msg_id: {
+                            'id': user_msg_id,
+                            'parentId': None,
+                            'role': 'user',
+                            'content': prompt,
+                            'childrenIds': [assistant_msg_id],
+                            'timestamp': int(time.time()),
+                            'models': [model_id],
+                        },
+                        assistant_msg_id: {
+                            'id': assistant_msg_id,
+                            'parentId': user_msg_id,
+                            'role': 'assistant',
+                            'content': '',
+                            'done': False,
+                            'model': model_id,
+                            'childrenIds': [],
+                            'timestamp': int(time.time()),
+                        },
+                    },
+                },
+                'messages': [
+                    {'role': 'user', 'content': prompt},
+                ],
+                'meta': {'automation_id': automation.id},
+            },
+        ),
+        internal_meta={'automation_id': automation.id},
+    )
+
+
+async def _append_run_to_chat(
+    app,
+    chat_id: str,
+    automation,
+    prompt: str,
+    model_id: str,
+    machine_id: str | None,
+    user_msg_id: str,
+    assistant_msg_id: str,
+):
+    """Add this run's prompt and its pending reply at the end of the ongoing chat.
+
+    Returns the message the prompt follows, or False when the chat is gone or no longer the owner's.
+    """
+    from open_webui.models.chat_messages import ChatMessages
+    from open_webui.utils.subagents import _parent_locks
+
+    async with _parent_locks.setdefault(chat_id, asyncio.Lock()):
+        async with Chats._chat_transaction(chat_id) as (session, chat):
+            if not chat or chat.user_id != automation.user_id:
+                return False
+            chat_data = copy.deepcopy(chat.chat or {})
+            # The chat must name the machine the run uses; a directory belongs to the machine it was set on.
+            if machine_id and machine_id_of(chat_data) != machine_id:
+                chat_data.pop('terminal_id', None)  # former name
+                chat_data.pop('working_directory', None)
+                chat_data['machine_id'] = machine_id
+            messages = await ChatMessages.get_messages_map_by_chat_id(chat_id, db=session) or {}
+            current_id = chat.current_message_id
+            parent_id = Chats._last_descendant_id(messages, current_id) if current_id in messages else None
+            now = int(time.time())
+            user_message = {
+                'id': user_msg_id,
+                'parentId': parent_id,
+                'childrenIds': [assistant_msg_id],
+                'role': 'user',
+                'content': prompt,
+                'models': [model_id],
+                'meta': {'automation_id': automation.id},
+                'timestamp': now,
+            }
+            assistant_message = {
+                'id': assistant_msg_id,
+                'parentId': user_msg_id,
+                'childrenIds': [],
+                'role': 'assistant',
+                'content': '',
+                'done': False,
+                'model': model_id,
+                'timestamp': now,
+            }
+            chat.chat = chat_data
+            chat.current_message_id = assistant_msg_id
+            chat.updated_at = now
+            await ChatMessages.upsert_message(user_msg_id, chat_id, automation.user_id, user_message, db=session)
+            await ChatMessages.upsert_message(
+                assistant_msg_id, chat_id, automation.user_id, assistant_message, db=session
+            )
+            if parent_id:
+                parent = messages[parent_id]
+                parent.setdefault('childrenIds', []).append(user_msg_id)
+                await ChatMessages.upsert_message(
+                    parent_id, chat_id, parent.get('user_id') or chat.user_id, parent, db=session
+                )
+        return parent_id
+
+
+async def _check_calendar_alerts(app) -> None:
+    """Check for upcoming calendar events and send alert notifications.
+
+    De-duplication is DB-backed via meta.alerted_at — survives restarts
+    and works across multiple instances.
+    """
+    from open_webui.models.calendar import CalendarEvents
+    from open_webui.socket.main import sio
+
+    now_ns = int(time.time_ns())
+    default_lookahead_ns = CALENDAR_ALERT_LOOKAHEAD_MINUTES * 60 * 1_000_000_000
+    # Grace window covers one poll cycle + jitter so "At time of event"
+    # alerts (alert_minutes=0) are not missed.
+    grace_ns = (SCHEDULER_POLL_INTERVAL + 5) * 1_000_000_000
+
+    async with get_async_db() as db:
+        upcoming = await CalendarEvents.get_upcoming_events(now_ns, default_lookahead_ns, grace_ns=grace_ns, db=db)
+
+    if not upcoming:
+        return
+
+    request = _build_request(app)
+    for event, user_tz in upcoming:
+        # Skip if already alerted for this start time
+        if event.meta and event.meta.get('alerted_at') == event.start_at:
+            continue
+
+        # Compute minutes until event starts
+        minutes_until = max(0, int((event.start_at - now_ns) / (60 * 1_000_000_000)))
+
+        alert_data = {
+            'event_id': event.id,
+            'title': event.title,
+            'description': event.description or '',
+            'start_at': event.start_at,
+            'minutes_until': minutes_until,
+            'calendar_id': event.calendar_id,
+            'location': event.location or '',
+        }
+
+        from open_webui.models.calendar import CalendarEvent
+        from sqlalchemy import select
+
+        async with get_async_db() as db:
+            current = await db.scalar(select(CalendarEvent).where(CalendarEvent.id == event.id).with_for_update())
+            if (
+                not current
+                or current.is_cancelled
+                or current.start_at != event.start_at
+                or (current.meta or {}).get('alerted_at') == event.start_at
+            ):
+                continue
+            time_str = f'in {minutes_until} min' if minutes_until > 0 else 'now'
+            from open_webui.utils.inbox import consume_event
+            from open_webui.models.notifications import emit_changes
+
+            alert_event = build_event(
+                request,
+                EVENTS.CALENDAR_ALERT,
+                subject_id=event.id,
+                subject_type='calendar.event',
+                source='scheduler',
+                message=event.title,
+                event_id=f'calendar:{event.id}:{event.start_at}',
+                data={
+                    **alert_data,
+                    'user_id': event.user_id,
+                    'starts_in': time_str,
+                    'start_at': event.start_at,
+                    'message': f'{event.title}: starting {time_str}',
+                },
+            )
+            current.meta = {**(current.meta or {}), 'alerted_at': event.start_at}
+            current.updated_at = time.time_ns()
+            recipients = await consume_event(alert_event, db=db)
+            await db.commit()
+            await emit_changes(recipients)
+            await publish_event(request, alert_event)
+
+        await sio.emit(
+            'events',
+            {
+                'data': {
+                    'type': 'calendar:alert',
+                    'data': alert_data,
+                },
+            },
+            room=f'user:{event.user_id}',
+        )
+
+
+async def _record_run(
+    request: Request,
+    automation_id: str,
+    status: str,
+    chat_id: str = None,
+    error: str = None,
+    actor=None,
+):
+    """Insert a run record into automation_run."""
+    async with get_async_db() as db:
+        await AutomationRuns.insert(
+            automation_id, status, chat_id=chat_id, error=error, request=request, event_actor=actor, db=db
+        )

@@ -1,0 +1,234 @@
+<script context="module" lang="ts">
+	const drafts = new Map<string, { content: string; temp_id: string }>();
+	let draftAccount: string | undefined;
+</script>
+
+<script lang="ts">
+	import { v4 as uuidv4 } from 'uuid';
+	import { getContext } from 'svelte';
+	import XMark from '$lib/components/icons/XMark.svelte';
+	import { settings, mobile, user } from '$lib/stores';
+	import RichTextInput from '$lib/components/common/RichTextInput.svelte';
+	import MentionList from '$lib/components/channel/MessageInput/MentionList.svelte';
+	import { getSuggestionRenderer } from '$lib/components/common/RichTextInput/suggestions';
+	import { commentsRequest, resourceQuery, type CommentResource } from '$lib/apis/comments';
+	import { middleTruncate } from './anchors';
+	export let resource: CommentResource;
+	export let draftKey: string;
+	export let contextLabel = '';
+	export let quote = '';
+	export let scrollable = true;
+	export let embedded = false;
+	export let onClearContext: (() => void) | null = null;
+	export let initialContent = '';
+	export let submitLabel = 'Comment';
+	export let onSubmitted: () => void = () => {};
+	export function focus() {
+		editor?.commands.focus();
+	}
+	export let onSubmit: (content: string, tempId: string) => Promise<void>;
+	export let onCancel: (() => void) | null = null;
+	export let cancelOnOutsideClick = false;
+	export let compact = false;
+	const i18n = getContext<any>('i18n');
+	let root: HTMLDivElement;
+	const outsidePointer = (event: PointerEvent) => {
+		const target = event.target as Element | null;
+		if (
+			!cancelOnOutsideClick ||
+			!onCancel ||
+			saving ||
+			!target?.isConnected ||
+			root?.contains(target) ||
+			target.closest('.suggestion-list-container')
+		)
+			return;
+		drafts.delete(draftKey);
+		onCancel();
+	};
+	if (draftAccount !== $user?.id) {
+		drafts.clear();
+		draftAccount = $user?.id;
+	}
+	let content = drafts.get(draftKey)?.content ?? initialContent;
+	let tempId = drafts.get(draftKey)?.temp_id ?? uuidv4();
+	let editor: import('@tiptap/core').Editor | null = null;
+	let saving = false;
+	let submitted = false;
+	let error = '';
+	// Preserve the previous mention label for i18n extraction: $i18n.t('Mention someone')
+	const suggestions = [
+		{
+			char: '@',
+			render: getSuggestionRenderer(MentionList, {
+				i18n,
+				userSuggestions: true,
+				modelSuggestions: false,
+				loadUsers: (query: string, signal: AbortSignal) =>
+					commentsRequest(
+						`/mentions?${resourceQuery(resource)}&query=${encodeURIComponent(query)}`,
+						'GET',
+						undefined,
+						signal
+					)
+			})
+		}
+	];
+	const remember = () => {
+		if (submitted) return;
+		if (content.trim()) drafts.set(draftKey, { content, temp_id: tempId });
+		else drafts.delete(draftKey);
+	};
+	const submit = async () => {
+		if (saving || !content.trim()) return;
+		saving = true;
+		error = '';
+		remember();
+		try {
+			await onSubmit(content, tempId);
+			submitted = true;
+			content = '';
+			drafts.delete(draftKey);
+			tempId = uuidv4();
+			editor?.commands.clearContent();
+			onSubmitted();
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		} finally {
+			saving = false;
+		}
+	};
+</script>
+
+<svelte:window on:pointerdown={outsidePointer} />
+
+<div
+	bind:this={root}
+	class="w-full"
+	on:focusout={(event) => {
+		if (
+			onCancel &&
+			!saving &&
+			!content.trim() &&
+			!event.currentTarget.contains(event.relatedTarget as Node | null)
+		)
+			onCancel();
+	}}
+>
+	<div class="min-w-0 flex-1">
+		<div
+			dir={$settings?.chatDirection === 'RTL'
+				? 'rtl'
+				: $settings?.chatDirection === 'LTR'
+					? 'ltr'
+					: 'auto'}
+			class="relative {embedded
+				? ''
+				: `rounded-2xl border border-base-100/50 dark:border-base-850/50 hover:border-base-200/70 focus-within:border-base-100/70 hover:dark:border-base-800/70 focus-within:dark:border-base-800/70 transition bg-base-0/5 dark:bg-base-500/5 ps-3 pb-2.5 ${contextLabel || quote ? 'pt-1' : 'pt-2.5'}`} {($settings?.highContrastMode ??
+			false)
+				? 'focus-within:outline focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-blue-500'
+				: ''}"
+		>
+			{#if contextLabel || quote}
+				<div class="pb-2 {embedded ? '' : 'pe-3'} text-left w-full flex flex-col">
+					{#if contextLabel || onClearContext}
+						<div
+							class="flex items-center justify-between gap-2 text-xs text-base-500 dark:text-base-400"
+						>
+							<span class="truncate">{contextLabel}</span>{#if onClearContext}<button
+									type="button"
+									class="flex h-6 shrink-0 items-center justify-center p-0 hover:text-base-700 dark:hover:text-base-200"
+									aria-label={$i18n.t('Remove context')}
+									on:click={onClearContext}><XMark className="size-3.5" /></button
+								>{/if}
+						</div>
+					{/if}
+					{#if quote}<div
+							class="{embedded
+								? ''
+								: 'mb-1 mt-1'} border-l-2 border-base-200 dark:border-base-700 ps-2 text-xs text-base-500 break-words"
+							title={quote}
+						>
+							{middleTruncate(quote)}
+						</div>{/if}
+				</div>
+			{/if}
+			<div class={embedded ? 'min-h-6 py-0.5' : ''}>
+				<!-- Padding lives inside the scroller so its scrollbar sits in the send-button column. -->
+				<div
+					class="scrollbar-hidden rtl:text-right ltr:text-left bg-transparent dark:text-base-100 outline-hidden w-full resize-none h-fit {embedded
+						? 'pe-9'
+						: submitLabel === 'Save'
+							? 'pe-16'
+							: 'pe-12'} {scrollable
+						? `${embedded || compact ? 'max-h-40' : 'max-h-96'} overflow-auto`
+						: ''}"
+				>
+					<RichTextInput
+						id={`comment-input-${tempId}`}
+						bind:editor
+						value={content}
+						{suggestions}
+						placeholder={$i18n.t('Add a comment…')}
+						className="input-prose min-h-5 h-full text-[0.8125rem]! leading-5! [&_.tiptap>p:first-child]:mt-0! [&_.tiptap>p:last-child]:mb-0!"
+						editable={!saving}
+						showFormattingToolbar={false}
+						onChange={(value) => {
+							if (submitted) return;
+							content = value.md;
+							remember();
+						}}
+						on:keydown={(event) => {
+							const e = event.detail.event;
+							if (
+								e.isComposing ||
+								e.keyCode === 229 ||
+								editor?.view.composing ||
+								document.getElementById('suggestions-container')
+							)
+								return;
+							if (
+								e.key === 'Enter' &&
+								!e.shiftKey &&
+								(($settings?.ctrlEnterToSend ?? false) ? e.metaKey || e.ctrlKey : !$mobile)
+							) {
+								e.preventDefault();
+								submit();
+							}
+						}}
+					/>
+				</div>
+			</div>
+			{#if error}<p role="alert" class="py-1 text-xs text-base-500 dark:text-base-400">
+					{error}
+				</p>{/if}
+			<div class="absolute {embedded ? 'bottom-0 end-0' : 'bottom-2 end-2.5'} flex items-center">
+				<div class="flex items-center gap-2">
+					<button
+						type="button"
+						aria-label={$i18n.t(submitLabel)}
+						title={$i18n.t(submitLabel)}
+						class="flex h-6 shrink-0 items-center justify-center bg-base-1000 text-base-0 transition hover:bg-base-900 disabled:bg-base-200 disabled:text-base-500 dark:bg-base-0 dark:text-base-1000 dark:hover:bg-base-100 dark:disabled:bg-base-600 dark:disabled:text-base-850 {submitLabel ===
+						'Save'
+							? 'rounded-md px-2 text-xs'
+							: 'size-6 rounded-full'}"
+						disabled={saving || !content.trim() || content.length > 20000}
+						on:click={submit}
+					>
+						{#if submitLabel === 'Save'}
+							{$i18n.t(submitLabel)}
+						{:else}
+							<svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+								<path
+									fill-rule="evenodd"
+									d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z"
+									clip-rule="evenodd"
+								/>
+							</svg>
+						{/if}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>

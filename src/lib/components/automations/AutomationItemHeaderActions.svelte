@@ -1,0 +1,104 @@
+<script lang="ts">
+	import { getContext } from 'svelte';
+
+	import Dropdown from '$lib/components/common/Dropdown.svelte';
+	import DropdownMenu from '$lib/components/common/DropdownMenu.svelte';
+	import Spinner from '$lib/components/common/Spinner.svelte';
+	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import DocumentDuplicate from '$lib/components/icons/DocumentDuplicate.svelte';
+	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
+	import GarbageBin from '$lib/components/icons/GarbageBin.svelte';
+	import Link from '$lib/components/icons/Link.svelte';
+	import Play from '$lib/components/icons/Play.svelte';
+	import Share from '$lib/components/icons/Share.svelte';
+	import type i18nType from '$lib/i18n';
+
+	const i18n: typeof i18nType = getContext('i18n');
+
+	export let loading = false;
+	export let dirty = false;
+	export let saving = false;
+	export let runNowHandler: (() => void) | null = () => {};
+	export let copyLinkHandler = () => {};
+	export let saveHandler = () => {};
+	export let duplicateHandler = () => {};
+	// Null hides the action: sharing and deleting are the owner's (or an admin's).
+	export let shareHandler: (() => void) | null = null;
+	export let deleteHandler: (() => void) | null = () => {};
+
+	// Same soft round buttons as the folder view's top bar.
+	const iconButton =
+		'relative flex size-6.5 shrink-0 items-center justify-center rounded-full border border-base-100 bg-base-50/60 text-base-500 transition-colors hover:bg-base-100 hover:text-base-900 aria-expanded:bg-base-100 aria-expanded:text-base-900 aria-disabled:opacity-60 dark:border-base-850 dark:bg-base-850/50 dark:text-base-400 dark:hover:bg-base-850 dark:hover:text-base-0 dark:aria-expanded:bg-base-850 dark:aria-expanded:text-base-0';
+</script>
+
+<div class="ml-auto flex shrink-0 items-center gap-1">
+	{#if dirty}
+		<button
+			class="mr-0.5 flex h-6.5 items-center gap-1.5 rounded-full bg-base-900 px-3 text-xs text-base-0 transition hover:bg-base-1000 disabled:opacity-60 dark:bg-base-100 dark:text-base-900 dark:hover:bg-base-0"
+			type="button"
+			disabled={saving}
+			on:click={saveHandler}
+		>
+			{$i18n.t('Save')}
+			{#if saving}<Spinner className="size-3" />{/if}
+		</button>
+	{/if}
+
+	{#if runNowHandler}
+		<Tooltip content={$i18n.t('Run now')}>
+			<button
+				class={iconButton}
+				on:click={runNowHandler}
+				type="button"
+				aria-disabled={loading}
+				aria-label={$i18n.t('Run now')}
+			>
+				{#if loading}
+					<Spinner className="size-3" />
+				{:else}
+					<Play className="size-3" strokeWidth="1.5" />
+				{/if}
+			</button>
+		</Tooltip>
+	{/if}
+
+	{#if shareHandler}
+		<Tooltip content={$i18n.t('Share')}>
+			<button
+				class={iconButton}
+				on:click={shareHandler}
+				type="button"
+				aria-label={$i18n.t('Share')}
+			>
+				<Share className="size-3.5" strokeWidth="1.5" />
+			</button>
+		</Tooltip>
+	{/if}
+
+	<Tooltip content={$i18n.t('Copy link')}>
+		<button
+			class={iconButton}
+			on:click={copyLinkHandler}
+			type="button"
+			aria-label={$i18n.t('Copy link')}
+		>
+			<Link className="size-3.5" strokeWidth="1.5" />
+		</button>
+	</Tooltip>
+
+	<Dropdown align="end" closeOnSelect>
+		<button class={iconButton} type="button" aria-label={$i18n.t('More')}>
+			<EllipsisHorizontal className="size-3.5" strokeWidth="2" />
+		</button>
+		<DropdownMenu slot="content" className="w-40">
+			<button type="button" on:click={duplicateHandler}>
+				<DocumentDuplicate className="size-3.5" />{$i18n.t('Duplicate')}
+			</button>
+			{#if deleteHandler}
+				<button type="button" on:click={deleteHandler}>
+					<GarbageBin className="size-3.5" />{$i18n.t('Delete')}
+				</button>
+			{/if}
+		</DropdownMenu>
+	</Dropdown>
+</div>
