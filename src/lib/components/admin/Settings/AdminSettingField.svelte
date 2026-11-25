@@ -5,9 +5,9 @@
 	export let className = '';
 </script>
 
-<div class={className}>
+<div class="llmw-field {className}">
 	{#if label}
-		<label class="text-xs text-base-600 dark:text-base-400" for={forId || undefined}>
+		<label class="llmw-field-label text-xs text-base-600 dark:text-base-400" for={forId || undefined}>
 			{label}
 		</label>
 	{/if}
@@ -17,7 +17,7 @@
 	</div>
 
 	{#if description}
-		<p class="mt-0.5 text-[0.6875rem] text-base-400 dark:text-base-600">
+		<p class="llmw-desc mt-0.5 text-[0.6875rem] text-base-400 dark:text-base-600">
 			{description}
 		</p>
 	{/if}

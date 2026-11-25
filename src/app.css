@@ -1206,3 +1206,368 @@ html.high-contrast:not(.dark) .shimmer::after {
 	outline: 2px solid rgba(59, 130, 246, 0.5);
 	outline-offset: -2px;
 }
+
+/* ------------------------------------------------------------------
+   llm-workspace: Settings window, larger type + accent styling.
+   Scoped to .llmw-settings so the rest of the app is unaffected.
+   ------------------------------------------------------------------ */
+.llmw-settings {
+	--llmw-blue: #3b82f6;
+	--llmw-violet: #8b5cf6;
+	--llmw-cyan: #06b6d4;
+	font-size: 0.9375rem;
+	border: 1px solid rgb(139 92 246 / 0.18);
+	box-shadow:
+		0 0 0 1px rgb(255 255 255 / 0.02),
+		0 30px 80px -20px rgb(0 0 0 / 0.6),
+		0 0 60px -10px rgb(139 92 246 / 0.25);
+	background-image:
+		radial-gradient(60rem 30rem at 0% 0%, rgb(139 92 246 / 0.1), transparent 60%),
+		radial-gradient(50rem 30rem at 100% 100%, rgb(6 182 212 / 0.07), transparent 60%);
+}
+
+/* Readable type scale (default was 10-12px) */
+.llmw-settings .text-\[0\.5625rem\],
+.llmw-settings .text-\[0\.625rem\] {
+	font-size: 0.75rem;
+	line-height: 1.1rem;
+}
+.llmw-settings .text-\[0\.6875rem\],
+.llmw-settings .text-\[0\.71875rem\] {
+	font-size: 0.8125rem;
+	line-height: 1.25rem;
+}
+.llmw-settings .text-xs {
+	font-size: 0.875rem;
+	line-height: 1.35rem;
+}
+.llmw-settings .text-\[0\.8125rem\],
+.llmw-settings .text-sm {
+	font-size: 0.9375rem;
+	line-height: 1.45rem;
+}
+.llmw-settings .h-7 {
+	height: 2.1rem;
+}
+
+/* Sidebar navigation */
+.llmw-settings #settings-tabs-container {
+	background: linear-gradient(180deg, rgb(139 92 246 / 0.06), transparent 40%);
+}
+.llmw-settings #settings-tabs-container .text-\[0\.625rem\] {
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	font-weight: 600;
+	font-size: 0.6875rem;
+	margin-top: 0.75rem;
+	background: linear-gradient(90deg, var(--llmw-violet), var(--llmw-cyan));
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+}
+.llmw-settings [role='tab'] {
+	position: relative;
+	border-radius: 0.75rem;
+	padding-inline: 0.75rem;
+	transition:
+		transform 0.15s ease,
+		background-color 0.15s ease,
+		color 0.15s ease;
+}
+.llmw-settings [role='tab'] svg {
+	width: 1rem;
+	height: 1rem;
+}
+.llmw-settings [role='tab']:hover {
+	transform: translateX(2px);
+}
+.llmw-settings [role='tab'][aria-selected='true'] {
+	background: linear-gradient(90deg, rgb(139 92 246 / 0.22), rgb(59 130 246 / 0.08));
+	box-shadow: inset 0 0 0 1px rgb(139 92 246 / 0.25);
+}
+.llmw-settings [role='tab'][aria-selected='true']::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 22%;
+	bottom: 22%;
+	width: 3px;
+	border-radius: 3px;
+	background: linear-gradient(180deg, var(--llmw-violet), var(--llmw-cyan));
+	box-shadow: 0 0 10px var(--llmw-violet);
+}
+.llmw-settings [role='tab'][aria-selected='true'] svg {
+	color: #a78bfa;
+}
+
+/* Switches */
+.llmw-settings button[role='switch'] {
+	height: 1.25rem;
+	min-height: 1.25rem;
+	width: 2.25rem;
+}
+.llmw-settings button[role='switch'] > span {
+	width: 1rem;
+	height: 1rem;
+}
+.llmw-settings button[role='switch'][data-state='checked'] {
+	background: linear-gradient(90deg, var(--llmw-violet), var(--llmw-blue));
+	box-shadow: 0 0 12px -2px rgb(139 92 246 / 0.7);
+}
+.llmw-settings button[role='switch'][data-state='checked'] > span {
+	left: 1.125rem;
+	background: #fff;
+}
+
+/* Inputs, selects, textareas */
+.llmw-settings input:not([type='checkbox']):not([type='radio']):not([type='range']),
+.llmw-settings select,
+.llmw-settings textarea {
+	font-size: 0.9375rem;
+	border-radius: 0.75rem;
+	transition:
+		box-shadow 0.15s ease,
+		border-color 0.15s ease;
+}
+.llmw-settings input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
+.llmw-settings select:focus,
+.llmw-settings textarea:focus {
+	outline: none;
+	box-shadow:
+		0 0 0 1px rgb(139 92 246 / 0.6),
+		0 0 16px -4px rgb(139 92 246 / 0.6);
+}
+.llmw-settings input[type='range'] {
+	accent-color: var(--llmw-violet);
+}
+
+/* Primary (save) buttons */
+.llmw-settings button.bg-base-900,
+.llmw-settings button.dark\:bg-base-100 {
+	background: linear-gradient(90deg, var(--llmw-violet), var(--llmw-blue)) !important;
+	color: #fff !important;
+	border-radius: 0.75rem;
+	padding-inline: 1rem;
+	box-shadow: 0 6px 20px -6px rgb(139 92 246 / 0.7);
+	transition:
+		transform 0.15s ease,
+		box-shadow 0.15s ease,
+		filter 0.15s ease;
+}
+.llmw-settings button.bg-base-900:hover,
+.llmw-settings button.dark\:bg-base-100:hover {
+	transform: translateY(-1px);
+	filter: brightness(1.1);
+	box-shadow: 0 10px 28px -6px rgb(139 92 246 / 0.85);
+}
+
+/* Cards, rows, titles */
+@keyframes llmw-gradient-pan {
+	0% {
+		background-position: 0% 50%;
+	}
+	100% {
+		background-position: 200% 50%;
+	}
+}
+
+/* Panel titles ("General", "Interface", ...) */
+.llmw-settings h2.font-medium.text-sm {
+	font-size: 1.625rem;
+	line-height: 2rem;
+	font-weight: 650;
+	letter-spacing: -0.025em;
+	margin-bottom: 1.25rem;
+	width: fit-content;
+	background: linear-gradient(90deg, #a78bfa, #60a5fa, #22d3ee, #a78bfa);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: llmw-gradient-pan 6s linear infinite;
+	filter: drop-shadow(0 0 18px rgb(139 92 246 / 0.35));
+}
+
+/* Sections become glass cards */
+.llmw-settings .llmw-card {
+	position: relative;
+	border-radius: 1.25rem;
+	padding: 1.1rem 1.25rem 1rem;
+	background: linear-gradient(160deg, rgb(255 255 255 / 0.035), rgb(255 255 255 / 0.01));
+	border: 1px solid rgb(139 92 246 / 0.14);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 0.04),
+		0 10px 30px -18px rgb(0 0 0 / 0.6);
+	backdrop-filter: blur(8px);
+	transition:
+		border-color 0.25s ease,
+		box-shadow 0.25s ease;
+}
+.llmw-settings .llmw-card:hover {
+	border-color: rgb(139 92 246 / 0.3);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 0.05),
+		0 14px 40px -18px rgb(139 92 246 / 0.45);
+}
+.llmw-settings .llmw-card::before {
+	/* glowing top edge */
+	content: '';
+	position: absolute;
+	top: -1px;
+	left: 1.5rem;
+	right: 1.5rem;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, rgb(167 139 250 / 0.8), rgb(34 211 238 / 0.6), transparent);
+	opacity: 0.6;
+	transition: opacity 0.25s ease;
+}
+.llmw-settings .llmw-card:hover::before {
+	opacity: 1;
+}
+html:not(.dark) .llmw-settings .llmw-card {
+	background: linear-gradient(160deg, rgb(255 255 255 / 0.85), rgb(248 246 255 / 0.7));
+	border-color: rgb(139 92 246 / 0.18);
+	box-shadow: 0 10px 30px -20px rgb(76 29 149 / 0.35);
+}
+
+/* Section headings */
+.llmw-settings .llmw-section-title {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 0.9rem;
+	font-size: 0.75rem;
+	font-weight: 650;
+	text-transform: uppercase;
+	letter-spacing: 0.09em;
+	color: #a78bfa;
+}
+.llmw-settings .llmw-section-title::before {
+	content: '';
+	width: 0.45rem;
+	height: 0.45rem;
+	border-radius: 999px;
+	background: linear-gradient(135deg, var(--llmw-violet), var(--llmw-cyan));
+	box-shadow: 0 0 10px var(--llmw-violet);
+}
+html:not(.dark) .llmw-settings .llmw-section-title {
+	color: #6d28d9;
+}
+
+/* Rows: dividers + hover highlight, bigger brighter labels */
+.llmw-settings .llmw-card-body {
+	gap: 0.35rem;
+}
+.llmw-settings .llmw-row {
+	margin-inline: -0.6rem;
+	padding: 0.55rem 0.6rem;
+	border-radius: 0.75rem;
+	transition: background-color 0.15s ease;
+}
+.llmw-settings .llmw-row:hover {
+	background: rgb(139 92 246 / 0.07);
+}
+.llmw-settings .llmw-row > label,
+.llmw-settings .llmw-field-label {
+	font-size: 0.9375rem;
+	font-weight: 500;
+	color: rgb(228 228 231);
+}
+html:not(.dark) .llmw-settings .llmw-row > label,
+html:not(.dark) .llmw-settings .llmw-field-label {
+	color: rgb(39 39 42);
+}
+.llmw-settings .llmw-desc {
+	margin-top: -0.4rem;
+	margin-bottom: 0.25rem;
+	padding-bottom: 0.6rem;
+	font-size: 0.8125rem;
+	line-height: 1.3rem;
+	color: rgb(161 161 170);
+	border-bottom: 1px solid rgb(255 255 255 / 0.04);
+}
+html:not(.dark) .llmw-settings .llmw-desc {
+	color: rgb(113 113 122);
+	border-bottom-color: rgb(0 0 0 / 0.05);
+}
+.llmw-settings .llmw-card-body > .llmw-desc:last-child {
+	border-bottom: 0;
+	padding-bottom: 0;
+}
+.llmw-settings .llmw-field {
+	padding-block: 0.35rem;
+}
+
+/* Select dropdowns */
+.llmw-settings select {
+	height: 2.25rem !important;
+	padding-inline-start: 0.85rem !important;
+	border-radius: 0.75rem !important;
+	border: 1px solid rgb(139 92 246 / 0.25) !important;
+	background: rgb(139 92 246 / 0.06) !important;
+	cursor: pointer;
+	transition:
+		border-color 0.15s ease,
+		background-color 0.15s ease;
+}
+.llmw-settings select:hover {
+	border-color: rgb(139 92 246 / 0.5) !important;
+	background: rgb(139 92 246 / 0.12) !important;
+}
+.llmw-settings select option {
+	background: #18181b;
+	color: #e4e4e7;
+}
+html:not(.dark) .llmw-settings select option {
+	background: #fff;
+	color: #27272a;
+}
+
+/* Text inputs and textareas: glassy fields */
+.llmw-settings textarea,
+.llmw-settings input[type='text'],
+.llmw-settings input[type='password'],
+.llmw-settings input[type='number'],
+.llmw-settings input[type='url'],
+.llmw-settings input[type='email'],
+.llmw-settings input:not([type]) {
+	background-color: rgb(255 255 255 / 0.03);
+	border: 1px solid rgb(255 255 255 / 0.07);
+	padding: 0.5rem 0.85rem;
+}
+html:not(.dark) .llmw-settings textarea,
+html:not(.dark) .llmw-settings input[type='text'],
+html:not(.dark) .llmw-settings input[type='password'],
+html:not(.dark) .llmw-settings input[type='number'],
+html:not(.dark) .llmw-settings input[type='url'],
+html:not(.dark) .llmw-settings input[type='email'],
+html:not(.dark) .llmw-settings input:not([type]) {
+	background-color: rgb(255 255 255 / 0.8);
+	border-color: rgb(0 0 0 / 0.08);
+}
+
+/* Settings search box in the sidebar */
+.llmw-settings #settings-tabs-container input {
+	border: 0;
+	background: transparent;
+	padding: 0.25rem 0;
+}
+
+/* Thin violet scrollbars */
+.llmw-settings ::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+.llmw-settings ::-webkit-scrollbar-thumb {
+	border-radius: 999px;
+	background: rgb(139 92 246 / 0.35);
+}
+.llmw-settings ::-webkit-scrollbar-thumb:hover {
+	background: rgb(139 92 246 / 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.llmw-settings h2.font-medium.text-sm {
+		animation: none;
+	}
+}

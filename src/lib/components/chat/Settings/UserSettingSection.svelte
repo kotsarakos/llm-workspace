@@ -4,14 +4,14 @@
 	export let className = '';
 </script>
 
-<section class="w-full {first ? '' : 'mt-4'} {className}">
+<section class="llmw-card w-full {first ? '' : 'mt-4'} {className}">
 	{#if title}
-		<h3 class="mb-2 text-xs text-base-600 dark:text-base-400">
+		<h3 class="llmw-section-title mb-2 text-xs text-base-600 dark:text-base-400">
 			{title}
 		</h3>
 	{/if}
 
-	<div class="flex flex-col gap-2.5">
+	<div class="llmw-card-body flex flex-col gap-2.5">
 		<slot />
 	</div>
 </section>

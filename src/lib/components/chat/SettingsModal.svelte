@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Aurora from '$lib/components/svelte-bits/Aurora.svelte';
+	import { isDarkMode, ACCENT_STOPS } from '$lib/components/svelte-bits/theme';
 	import english from '$lib/i18n/locales/en-US/translation.json';
 	import {
 		buildSettingsSearchIndex,
@@ -504,13 +506,28 @@
 <Modal
 	size="full"
 	containerClassName="p-3 sm:p-4 lg:p-6"
-	className="h-[calc(100dvh-1.5rem)] sm:h-[calc(100dvh-2rem)] lg:h-[calc(100dvh-3rem)] flex flex-col md:flex-row bg-base-0 dark:bg-base-900 rounded-4xl overflow-hidden"
+	className="llmw-settings relative isolate h-[calc(100dvh-1.5rem)] sm:h-[calc(100dvh-2rem)] lg:h-[calc(100dvh-3rem)] flex flex-col md:flex-row bg-base-0 dark:bg-base-900 rounded-4xl overflow-hidden"
 	ariaLabel={$i18n.t('Settings')}
 	bind:show={modalShow}
 >
+	<!-- llm-workspace: aurora glow across the top of the settings window -->
+	<div class="pointer-events-none absolute inset-x-0 top-0 h-56 z-0" aria-hidden="true">
+		<Aurora
+			colorStops={ACCENT_STOPS}
+			height={0.35}
+			amplitude={0.8}
+			blend={0.7}
+			speed={0.5}
+			layers={2}
+			mouseInteraction={false}
+			lightMode={!$isDarkMode}
+			opacity={$isDarkMode ? 0.55 : 0.35}
+		/>
+	</div>
+
 	<nav
 		id="settings-tabs-container"
-		class="shrink-0 min-w-0 md:min-h-0 flex flex-col border-b md:border-b-0 md:border-r border-base-100/30 dark:border-base-0/[0.02] md:w-[15rem]"
+		class="relative z-[1] shrink-0 min-w-0 md:min-h-0 flex flex-col border-b md:border-b-0 md:border-r border-base-100/30 dark:border-base-0/[0.02] md:w-[17rem]"
 	>
 		<div class="flex items-center gap-1 m-1 md:mb-0 shrink-0">
 			<button
@@ -795,7 +812,7 @@
 		</div>
 	</nav>
 
-	<div class="flex-1 min-w-0 min-h-0 p-4 md:px-5 flex flex-col">
+	<div class="relative z-[1] flex-1 min-w-0 min-h-0 p-4 md:px-6 md:pt-6 flex flex-col">
 		<div
 			class="flex-1 min-h-0 overflow-hidden"
 			id={isAdminTab(selectedTab) ? adminTabPanelId(selectedTab) : undefined}

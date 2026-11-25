@@ -9,7 +9,7 @@
 	const labelId = `user-setting-${uuidv4()}`;
 </script>
 
-<div class="group/setting-row flex items-center justify-between gap-2.5 {className}">
+<div class="llmw-row group/setting-row flex items-center justify-between gap-2.5 {className}">
 	<label
 		id={labelId}
 		for={`${labelId}-control`}
@@ -24,7 +24,7 @@
 </div>
 
 {#if description}
-	<p class="-mt-1 text-[0.6875rem] text-base-400 dark:text-base-600">
+	<p class="llmw-desc -mt-1 text-[0.6875rem] text-base-400 dark:text-base-600">
 		{description}
 	</p>
 {/if}
