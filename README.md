@@ -1,111 +1,129 @@
-<h2>Open WebUI</h2>
+# llm-workspace
 
-<p>Open WebUI is <a href="https://docs.openwebui.com/"><strong>a home for AI</strong></a>: an extensible, easy-to-use, self-hosted platform built to run entirely offline. Connect local models through Ollama, use OpenAI-compatible APIs for local and cloud models, or add agents through <a href="https://docs.openwebui.com/features/open-terminal/agents">Agent Client Protocol (ACP)</a>.</p>
+**A private, self-hosted workspace for running and chatting with your own LLMs, with a redesigned animated interface.**
 
-[![Open WebUI Demo](https://cdn.openwebui.com/open-webui-demo.gif)](https://docs.openwebui.com/)
+llm-workspace is a customized build of [Open WebUI](https://github.com/open-webui/open-webui). It runs fully on your own machine, connects to local models through [Ollama](https://ollama.com), and keeps chats, documents and settings on your hardware. On top of the upstream platform it adds a redesigned UI, a reworked settings experience and a leaner codebase.
 
-![GitHub stars](https://img.shields.io/github/stars/open-webui/open-webui?style=social)
-![GitHub forks](https://img.shields.io/github/forks/open-webui/open-webui?style=social)
-![GitHub watchers](https://img.shields.io/github/watchers/open-webui/open-webui?style=social)
-![GitHub repo size](https://img.shields.io/github/repo-size/open-webui/open-webui)
-![GitHub language count](https://img.shields.io/github/languages/count/open-webui/open-webui)
-![GitHub top language](https://img.shields.io/github/languages/top/open-webui/open-webui)
-![GitHub last commit](https://img.shields.io/github/last-commit/open-webui/open-webui?color=red)
-[![Discord](https://img.shields.io/badge/Discord-Open_WebUI-blue?logo=discord&logoColor=white)](https://discord.gg/5rJgQTnV4s)
-[![](https://img.shields.io/static/v1?label=Sponsor&message=Support&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/open-webui)
+> Built on Open WebUI. The Open WebUI name and logo are kept as its license requires; see [License & credits](#license--credits).
 
-[Explore Open WebUI →](https://docs.openwebui.com/)
+<!--
+Screenshots: add images to docs/screenshots/ and uncomment.
+![Sign-in page](docs/screenshots/sign-in.png)
+![Chat](docs/screenshots/chat.png)
+![Settings](docs/screenshots/settings.png)
+-->
 
-### Installation
+---
 
-#### Python
+## Highlights
 
-```bash
-# With uv installed (macOS/Linux)
-DATA_DIR=~/.open-webui uvx --python 3.12 open-webui@latest serve
+### Redesigned interface
+A consistent blue, violet and cyan theme built from animated [Svelte Bits](https://github.com/DavidHDev/svelte-bits) components (WebGL and CSS, no extra runtime dependencies):
 
-# Or install and run with pip (Python 3.12)
-pip install open-webui
-open-webui serve
+| Area | What changed |
+|---|---|
+| Sign-in | Aurora WebGL background, "decrypting" animated title, star-border sign-in button |
+| App shell | Animated DarkVeil backdrop and click-spark interaction feedback |
+| Sidebar | Frosted-glass panel with a shining "New Chat" action |
+| Composer | Cursor-reactive glowing border around the message box |
+| New chat | Animated gradient greeting |
+
+Every effect follows light/dark mode, pauses when off-screen or in a hidden tab, and respects the OS "reduce motion" setting.
+
+### Settings, rebuilt for readability
+- Larger type scale (default 10–12px raised to 13–15px)
+- Sections rendered as glass cards with gradient headings, dividers and hover states
+- Accent-styled tabs, switches, dropdowns, inputs and save buttons
+- Implemented through the shared section/row/field components, so every user and admin settings page gets the same design from one scoped stylesheet
+
+### Leaner codebase
+- Removed 65 frontend files unreachable from any route, found with a custom import-graph analysis and verified before deletion
+- Dropped 15 unused npm packages (~184 including transitive dependencies)
+- Removed upstream release and publishing pipelines that don't apply to this project
+
+### Local-first by default
+- Runs in Docker, bound to `localhost` only
+- Uses your existing Ollama models; no data leaves your machine
+- One-command build and run script
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | SvelteKit, Svelte 5, TypeScript, Tailwind CSS v4 |
+| UI effects | Svelte Bits (WebGL2 shaders, canvas, CSS) |
+| Backend | Python, FastAPI |
+| Models | Ollama (local LLMs) and OpenAI-compatible APIs |
+| Deployment | Docker |
+
+```
+Browser ──► llm-workspace (Docker, localhost:3000)
+              ├─ SvelteKit frontend
+              └─ FastAPI backend ──► Ollama (host, :11434) ──► local models
 ```
 
-Then open [http://localhost:8080](http://localhost:8080).
+---
 
-#### Docker
+## Quick start
 
+### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/)
+- [Ollama](https://ollama.com) running on the host, with at least one model:
+  ```bash
+  ollama pull qwen3:4b
+  ```
+
+### Run
 ```bash
-docker run -d -p 3000:8080 --add-host=host.docker.internal:host-gateway -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
+git clone https://github.com/kotsarakos/llm-workspace.git
+cd llm-workspace
+./docker-run.sh
 ```
 
-Then open [http://localhost:3000](http://localhost:3000).
+Open **http://localhost:3000**. The first account you create becomes the administrator.
 
-| Image tag | Includes                                                                                 |
-| --------- | ---------------------------------------------------------------------------------------- |
-| `:main`   | Standard image with local AI dependencies                                                |
-| `:slim`   | Lightweight image using external services for embeddings, document extraction, and voice |
-| `:cuda`   | Open WebUI with CUDA acceleration                                                        |
-| `:ollama` | Open WebUI bundled with Ollama                                                           |
-| `:dev`    | Latest development build                                                                 |
+| Variable | Default | Purpose |
+|---|---|---|
+| `LLM_WORKSPACE_PORT` | `3000` | Port on localhost |
+| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Where Ollama is reachable from the container |
 
-Add these options to `docker run` before the image name as needed:
+Data (users, chats, settings) is stored in the Docker volume `llm-workspace-data` and survives rebuilds.
 
-| Option                                               | Purpose                                                                                  |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `-e OLLAMA_BASE_URL=http://your-ollama-server:11434` | Connect to Ollama on another server                                                      |
-| `-e OPENAI_API_KEY=your_secret_key`                  | Set your OpenAI API key                                                                  |
-| `-e HF_HUB_OFFLINE=1`                                | Disable Hugging Face model downloads for offline use                                     |
-| `--gpus all`                                         | Enable Nvidia GPU access for `:cuda` or `:ollama`; requires the Nvidia Container Toolkit |
+### Model tips
+Tools such as web search and memory are enabled by default and need a model that supports tool calling, for example `qwen3`, `llama3.1` or `llama3.2`. For models without tool support (e.g. `gemma3`), set **Admin Settings → Models → *model* → Advanced Params → Function Calling** to **Legacy**.
 
-See the [Docker installation guide](https://docs.openwebui.com/getting-started/quick-start/) for setup instructions and configuration options.
+---
 
-#### Desktop App
+## Development
 
-[Download the native desktop app](https://github.com/open-webui/desktop) for macOS, Windows, and Linux.
+```bash
+npm install
+npm run dev        # frontend dev server with hot reload at http://localhost:5173
+```
 
-[Read the docs →](https://docs.openwebui.com/getting-started/)
+Custom work lives mainly in:
 
-### Ecosystem
+| Path | Contents |
+|---|---|
+| `src/lib/components/svelte-bits/` | Animated UI components and the shared theme (`theme.ts`) |
+| `src/app.css` (end of file) | Scoped settings-window design (`.llmw-settings`) |
+| `src/routes/auth/+page.svelte` | Sign-in page |
+| `src/routes/(app)/+layout.svelte` | App shell backdrop and effects |
+| `docker-run.sh` | Build-and-run script |
 
-- [Open Terminal](https://github.com/open-webui/open-terminal) / [Terminals (Enterprise)](https://github.com/open-webui/terminals): The action layer that turns Open WebUI into a full agent harness, with enterprise orchestration for per-user workspaces.
-- [Knowledge Base Sync (oikb)](https://github.com/open-webui/oikb): Mirror folders, repos, buckets, and wikis into Open WebUI Knowledge Bases with incremental sync.
-- [Open WebUI Computer](https://github.com/open-webui/computer): Your computer in any browser: files, editor, terminal, git, and optional AI agents, running on your real machine.
+---
 
-See the [ecosystem documentation](https://docs.openwebui.com/ecosystem/) for details.
+## Roadmap
+- [ ] Screenshots and a short demo GIF
+- [ ] Docker Compose setup with optional GPU support
+- [ ] Optional cloud deployment with HTTPS and authentication
+- [ ] Custom model presets for specific business workflows
 
-### Troubleshooting and Updates
+---
 
-See the [troubleshooting guide](https://docs.openwebui.com/troubleshooting/) for connection issues and the [updating guide](https://docs.openwebui.com/getting-started/updating) to update your installation.
+## License & credits
 
-### Documentation
-
-See the [docs](https://docs.openwebui.com/) for configuration and usage, and the [roadmap](https://docs.openwebui.com/roadmap/) for planned work.
-
-For Docker Compose, Kubernetes, and other setups, see the [installation docs](https://docs.openwebui.com/getting-started/).
-
-### Support
-
-[Open an issue](https://github.com/open-webui/open-webui/issues) or [start a discussion](https://github.com/open-webui/open-webui/discussions).
-
-Find us on [Reddit](https://www.reddit.com/r/OpenWebUI/), [X](https://x.com/OpenWebUI), and [Discord](https://discord.gg/5rJgQTnV4s).
-
-### Security
-
-Report vulnerabilities privately through [GitHub security advisories](https://github.com/open-webui/open-webui/security). Security reports are accepted only through GitHub.
-
-### Star History
-
-<a href="https://star-history.com/#open-webui/open-webui&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=open-webui/open-webui&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=open-webui/open-webui&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=open-webui/open-webui&type=Date" />
-  </picture>
-</a>
-
-#### License
-
-Includes code under the Open WebUI License, which requires preserving the Open WebUI branding, and prior contributions under their original licenses. See [LICENSE](./LICENSE) and [LICENSE_HISTORY](./LICENSE_HISTORY) for terms and history.
-
-[Enterprise](https://docs.openwebui.com/enterprise) · [Careers](https://careers.openwebui.com/) · [Sponsor](https://github.com/sponsors/open-webui)
-
-Created by [Timothy Jaeryang Baek](https://github.com/tjbck).
+- **Open WebUI**: this project is built on [Open WebUI](https://github.com/open-webui/open-webui), created by [Timothy Jaeryang Baek](https://github.com/tjbck) and maintained by Open WebUI Inc. and its contributors. It includes code under the Open WebUI License, which requires preserving the Open WebUI branding, and prior contributions under their original licenses. See [LICENSE](./LICENSE), [LICENSE_NOTICE](./LICENSE_NOTICE) and [LICENSE_HISTORY](./LICENSE_HISTORY).
+- **Svelte Bits**: animated components by [David Haz](https://github.com/DavidHDev/svelte-bits), used under the MIT + Commons Clause license. See [`src/lib/components/svelte-bits/LICENSE.md`](./src/lib/components/svelte-bits/LICENSE.md).
