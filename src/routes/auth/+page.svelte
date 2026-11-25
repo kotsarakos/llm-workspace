@@ -31,6 +31,10 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import OnBoarding from '$lib/components/OnBoarding.svelte';
 	import SensitiveInput from '$lib/components/common/SensitiveInput.svelte';
+	import Aurora from '$lib/components/svelte-bits/Aurora.svelte';
+	import DecryptedText from '$lib/components/svelte-bits/DecryptedText.svelte';
+	import StarBorder from '$lib/components/svelte-bits/StarBorder.svelte';
+	import { isDarkMode, ACCENT, ACCENT_STOPS } from '$lib/components/svelte-bits/theme';
 	import { redirect } from '@sveltejs/kit';
 
 	const i18n = getContext('i18n');
@@ -182,6 +186,15 @@
 
 	let onboarding = false;
 
+	$: authTitle =
+		($config?.onboarding ?? false)
+			? $i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })
+			: mode === 'ldap'
+				? $i18n.t(`Sign in to {{WEBUI_NAME}} with LDAP`, { WEBUI_NAME: $WEBUI_NAME })
+				: mode === 'signin'
+					? $i18n.t(`Sign in to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })
+					: $i18n.t(`Sign up to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME });
+
 	onMount(async () => {
 		const redirectPath = $page.url.searchParams.get('redirect');
 		const logout = $page.url.searchParams.get('state') === 'logout';
@@ -269,6 +282,19 @@
 	<div id="main-content" tabindex="-1" class="sr-only left-0 top-0"></div>
 	<div class="w-full h-full absolute top-0 left-0 bg-base-0 dark:bg-base-1000"></div>
 
+	<div class="w-full h-full absolute top-0 left-0 pointer-events-none" aria-hidden="true">
+		<Aurora
+			colorStops={ACCENT_STOPS}
+			amplitude={1.1}
+			blend={0.6}
+			speed={0.6}
+			height={0.5}
+			layers={2}
+			lightMode={!$isDarkMode}
+			opacity={$isDarkMode ? 0.9 : 0.6}
+		/>
+	</div>
+
 	<div class="w-full absolute top-0 left-0 right-0 h-8 drag-region" />
 
 	{#if loaded && !onboarding}
@@ -335,15 +361,15 @@
 							>
 								<div class="mb-1">
 									<div class=" text-2xl font-normal">
-										{#if $config?.onboarding ?? false}
-											{$i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
-										{:else if mode === 'ldap'}
-											{$i18n.t(`Sign in to {{WEBUI_NAME}} with LDAP`, { WEBUI_NAME: $WEBUI_NAME })}
-										{:else if mode === 'signin'}
-											{$i18n.t(`Sign in to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
-										{:else}
-											{$i18n.t(`Sign up to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
-										{/if}
+										{#key authTitle}
+											<DecryptedText
+												text={authTitle}
+												animateOn="view"
+												sequential={true}
+												speed={35}
+												scrambleColor={ACCENT.violet}
+											/>
+										{/key}
 									</div>
 
 									{#if $config?.onboarding ?? false}
@@ -474,10 +500,18 @@
 												{/if}
 											</button>
 										{:else}
-											<button
-												class="bg-base-700/5 hover:bg-base-700/10 dark:bg-base-100/5 dark:hover:bg-base-100/10 dark:text-base-300 dark:hover:text-base-0 transition w-full rounded-full font-normal text-[0.8125rem] leading-5 py-2.5 aria-disabled:opacity-50 flex justify-center"
+											<StarBorder
+												as="button"
 												type="submit"
 												aria-disabled={submitting}
+												class="w-full font-normal! text-[0.8125rem] leading-5 py-2.5! aria-disabled:opacity-50"
+												theme={$isDarkMode ? 'dark' : 'light'}
+												color={ACCENT.violet}
+												trailColor={ACCENT.cyan}
+												radius={999}
+												stars={2}
+												glow={0.8}
+												duration={5}
 											>
 												<div class="self-center">
 													{mode === 'signin'
@@ -492,7 +526,7 @@
 														<Spinner />
 													</div>
 												{/if}
-											</button>
+											</StarBorder>
 
 											{#if $config?.features.enable_signup && !($config?.onboarding ?? false)}
 												<div class=" mt-4 text-[0.8125rem] leading-5 text-center">

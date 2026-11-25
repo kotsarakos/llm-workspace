@@ -99,6 +99,8 @@
 
 	import RichTextInput from '../common/RichTextInput.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
+	import BorderGlow from '$lib/components/svelte-bits/BorderGlow.svelte';
+	import { isDarkMode, ACCENT_STOPS } from '$lib/components/svelte-bits/theme';
 	import FileItem from '../common/FileItem.svelte';
 	import Image from '../common/Image.svelte';
 	import Spinner from '../common/Spinner.svelte';
@@ -2235,6 +2237,18 @@
 							</div>
 						{/if}
 
+						<BorderGlow
+							class="flex-1 w-full border-transparent!"
+							backgroundColor={$isDarkMode ? 'transparent' : '#ffffff'}
+							borderRadius={24}
+							glowColor="262 83 70"
+							colors={ACCENT_STOPS}
+							glowRadius={32}
+							glowIntensity={0.9}
+							edgeSensitivity={25}
+							animated={true}
+							fillOpacity={0.35}
+						>
 						<div
 							id={inputId === 'chat-input' ? 'message-input-container' : `${inputId}-wrapper`}
 							data-composer-id={inputId}
@@ -3214,6 +3228,7 @@
 								</div>
 							</div>
 						</div>
+						</BorderGlow>
 
 						{#if $config?.license_metadata?.input_footer}
 							<div class=" text-xs text-base-500 text-center line-clamp-1 marked">

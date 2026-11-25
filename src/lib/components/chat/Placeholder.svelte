@@ -27,6 +27,9 @@
 	import ContinueFolders from './ContinueFolders.svelte';
 	import RecentChats from './RecentChats.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import GradientText from '$lib/components/svelte-bits/GradientText.svelte';
+	import { ACCENT_STOPS } from '$lib/components/svelte-bits/theme';
+
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import MessageInput from './MessageInput.svelte';
 	import FolderPlaceholder from './Placeholder/FolderPlaceholder.svelte';
@@ -265,7 +268,7 @@
 			<div class="w-full flex flex-col justify-center items-center">
 				{#if showGreeting}
 					<h2 class="px-5 max-w-xl mb-1 text-2xl line-clamp-1" in:fade={{ duration: 100 }}>
-						{greeting}
+						<GradientText colors={ACCENT_STOPS} animationSpeed={6}>{greeting}</GradientText>
 					</h2>
 				{:else}
 					<div class="flex flex-row justify-center gap-2.5 @sm:gap-3 w-fit px-5 max-w-xl">
@@ -322,7 +325,9 @@
 									</span>
 								</Tooltip>
 							{:else}
-								{$i18n.t('Hello, {{name}}', { name: $user?.name })}
+								<GradientText colors={ACCENT_STOPS} animationSpeed={6}>
+									{$i18n.t('Hello, {{name}}', { name: $user?.name })}
+								</GradientText>
 							{/if}
 						</h2>
 					</div>

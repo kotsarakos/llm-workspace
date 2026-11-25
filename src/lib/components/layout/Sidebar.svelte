@@ -115,6 +115,8 @@
 	import ClockIcon from './Sidebar/icons/Clock.svelte';
 	import CodeIcon from './Sidebar/icons/Code.svelte';
 	import EditPencilIcon from './Sidebar/icons/EditPencil.svelte';
+	import ShinyText from '$lib/components/svelte-bits/ShinyText.svelte';
+	import { isDarkMode, ACCENT } from '$lib/components/svelte-bits/theme';
 	import NotesIcon from './Sidebar/icons/Notes.svelte';
 	import SearchIcon from './Sidebar/icons/Search.svelte';
 	import Sidebar from '../icons/Sidebar.svelte';
@@ -1387,9 +1389,9 @@
 			inert={!$showSidebar}
 			class="h-screen max-h-[100dvh] min-h-screen select-none {$mobile
 				? visible
-					? 'bg-base-50 dark:bg-base-950 z-50'
+					? 'bg-base-50/85 dark:bg-base-950/75 backdrop-blur-2xl z-50'
 					: 'bg-transparent z-0 pointer-events-none'
-				: `bg-base-50 dark:bg-base-950 z-50 ${$showSidebar ? '' : 'pointer-events-none'}`} shrink-0 text-base-700 dark:text-base-300 text-[0.8125rem] leading-5 fixed top-0 left-0 overflow-x-hidden
+				: `bg-base-50/70 dark:bg-base-950/55 backdrop-blur-2xl border-r border-base-200/40 dark:border-white/[0.06] z-50 ${$showSidebar ? '' : 'pointer-events-none'}`} shrink-0 text-base-700 dark:text-base-300 text-[0.8125rem] leading-5 fixed top-0 left-0 overflow-x-hidden
         "
 			style={$mobile
 				? `${panelStyle} --sidebar-width: ${mobileWidth}px;`
@@ -1508,7 +1510,15 @@
 								</div>
 
 								<div class="flex flex-1 self-center translate-y-[0.5px]">
-									<div class=" self-center text-[0.8125rem] leading-5">{$i18n.t('New Chat')}</div>
+									<div class=" self-center text-[0.8125rem] leading-5">
+										<ShinyText
+											text={$i18n.t('New Chat')}
+											color={$isDarkMode ? '#d4d4d8' : '#3f3f46'}
+											shineColor={$isDarkMode ? '#c4b5fd' : ACCENT.violet}
+											speed={2.5}
+											delay={4}
+										/>
+									</div>
 								</div>
 
 								<HotkeyHint name="newChat" className=" hover-reveal " />

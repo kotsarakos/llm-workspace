@@ -57,6 +57,9 @@
 	import UpdateInfoToast from '$lib/components/layout/UpdateInfoToast.svelte';
 	import Modal from '$lib/components/common/Modal.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
+	import DarkVeil from '$lib/components/svelte-bits/DarkVeil.svelte';
+	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
+	import { isDarkMode, ACCENT } from '$lib/components/svelte-bits/theme';
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte';
 	import { loadKeybindings, matchKeybinding, Shortcut } from '$lib/shortcuts';
 	import { canUseTemporaryChats } from '$lib/utils/settings-access';
@@ -512,9 +515,30 @@
 {/if}
 
 {#if $user}
-	<div class="app relative">
+	<div class="app relative bg-base-0 dark:bg-base-900">
+		<!-- llm-workspace: animated backdrop behind the whole app -->
+		<div class="fixed inset-0 pointer-events-none" aria-hidden="true">
+			<DarkVeil
+				color={ACCENT.violet}
+				speed={0.35}
+				glow={0.5}
+				grain={0.04}
+				opacity={$isDarkMode ? 0.45 : 0.3}
+				lightMode={!$isDarkMode}
+				mouseStrength={0.6}
+			/>
+		</div>
+
+		<ClickSpark
+			sparkColor={$isDarkMode ? '#c4b5fd' : ACCENT.violet}
+			sparkCount={10}
+			sparkRadius={28}
+			sparkSize={12}
+			glow={0.6}
+			duration={450}
+		>
 		<div
-			class=" text-base-700 dark:text-base-100 bg-base-0 dark:bg-base-900 h-screen max-h-[100dvh] overflow-auto flex flex-row justify-end"
+			class=" relative text-base-700 dark:text-base-100 bg-transparent h-screen max-h-[100dvh] overflow-auto flex flex-row justify-end"
 		>
 			{#if !['user', 'admin'].includes($user?.role)}
 				<AccountPending />
@@ -544,6 +568,7 @@
 				{/if}
 			{/if}
 		</div>
+		</ClickSpark>
 	</div>
 {/if}
 
