@@ -210,3 +210,26 @@ def test_other_api_refusals_do_not_press_media_keys():
     svc, desk = make(Refusing())
     assert "refused" in svc.control("next")
     assert desk.calls == []
+
+
+def test_now_playing_card_without_api():
+    svc, _ = make()
+    assert svc.now_playing_card() == {"available": False, "reason": "Spotify API not connected"}
+
+
+def test_now_playing_card_with_api():
+    class WithCard(FakeApi):
+        def now_playing_card(self):
+            return {"title": "Song", "artists": "Artist", "is_playing": True}
+
+    svc, _ = make(WithCard())
+    assert svc.now_playing_card() == {"available": True, "track": {"title": "Song", "artists": "Artist", "is_playing": True}}
+
+
+def test_now_playing_card_never_raises():
+    class Broken(FakeApi):
+        def now_playing_card(self):
+            raise RuntimeError("network down")
+
+    svc, _ = make(Broken())
+    assert svc.now_playing_card()["available"] is False

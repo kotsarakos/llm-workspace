@@ -11,6 +11,8 @@ PORT="${LLM_WORKSPACE_PORT:-3000}"
 MODEL="${LLM_MODEL:-qwen3:4b}"
 OLLAMA_URL="${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
 export SPOTIFY_MCP_PORT="${SPOTIFY_MCP_PORT:-8765}"
+# Web UI origins allowed to read the Spotify mini player data.
+export SPOTIFY_MCP_CORS_ORIGINS="${SPOTIFY_MCP_CORS_ORIGINS:-http://localhost:${PORT},http://127.0.0.1:${PORT}}"
 IMAGE=llm-workspace
 CONTAINER=llm-workspace
 RUN_DIR="$PWD/.run"

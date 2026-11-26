@@ -23,6 +23,8 @@ class Settings(BaseSettings):
 
     spotify_mcp_host: str = "127.0.0.1"
     spotify_mcp_port: int = 8765
+    # Web UI origins allowed to read /now-playing (comma separated).
+    spotify_mcp_cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # Spotify Web API (optional). Create an app at https://developer.spotify.com/dashboard
     spotify_client_id: str = ""

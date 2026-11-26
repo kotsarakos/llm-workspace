@@ -100,6 +100,24 @@ class SpotifyWebApi:
         device = (cur.get("device") or {}).get("name", "unknown device")
         return f"{item.describe()} ({state} on {device})"
 
+    def now_playing_card(self) -> dict | None:
+        """Structured now-playing data for the web UI mini player."""
+        cur = self._sp.current_playback()
+        item = (cur or {}).get("item")
+        if not item:
+            return None
+        images = (item.get("album") or {}).get("images") or []
+        return {
+            "title": item.get("name", ""),
+            "artists": ", ".join(a["name"] for a in item.get("artists", [])),
+            "album": (item.get("album") or {}).get("name", ""),
+            "image": images[0]["url"] if images else "",
+            "is_playing": bool(cur.get("is_playing")),
+            "device": (cur.get("device") or {}).get("name", ""),
+            "progress_ms": cur.get("progress_ms") or 0,
+            "duration_ms": item.get("duration_ms") or 0,
+        }
+
     def is_playing(self) -> bool | None:
         """True/False for the active device, None when nothing is active."""
         cur = self._sp.current_playback()

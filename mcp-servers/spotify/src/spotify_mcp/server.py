@@ -7,7 +7,10 @@ URL:  http://127.0.0.1:8765/mcp   (from Docker: http://host.docker.internal:8765
 from __future__ import annotations
 
 import logging
-from typing import Literal
+
+import anyio
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
@@ -103,6 +106,18 @@ def play_music(query: str, kind: Kind = "track") -> str:
 @server.tool(description="Tell what song is playing right now.", annotations=_hints("Now playing", read_only=True))
 def now_playing() -> str:
     return safe(service.now_playing)()
+
+
+@server.custom_route("/now-playing", methods=["GET"], include_in_schema=False)
+async def now_playing_http(request: Request) -> JSONResponse:
+    """Read-only now-playing data for the web UI mini player (no MCP session needed)."""
+    data = await anyio.to_thread.run_sync(service.now_playing_card)
+    headers = {"Cache-Control": "no-store", "Vary": "Origin"}
+    origin = request.headers.get("origin", "")
+    allowed = {o.strip() for o in settings.spotify_mcp_cors_origins.split(",") if o.strip()}
+    if origin in allowed:
+        headers["Access-Control-Allow-Origin"] = origin
+    return JSONResponse(data, headers=headers)
 
 
 def main() -> None:

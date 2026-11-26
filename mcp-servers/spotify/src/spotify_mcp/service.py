@@ -173,6 +173,18 @@ class SpotifyService:
             self._desk.open_uri(desktop.build_uri(item.kind, item.id))
             return f"Opened {item.describe()} in the Spotify app (playing directly needs Spotify Premium)."
 
+    def now_playing_card(self) -> dict:
+        """Data for the web UI mini player. Never raises."""
+        api = self._api()
+        if api is None:
+            return {"available": False, "reason": "Spotify API not connected"}
+        try:
+            card = api.now_playing_card()
+        except Exception as exc:  # the mini player must never break the UI
+            log.info("now playing card failed: %s", exc)
+            return {"available": False, "reason": "Spotify unavailable"}
+        return {"available": True, "track": card}
+
     def now_playing(self) -> str:
         api = self._api()
         if api is None:
