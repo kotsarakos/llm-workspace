@@ -1,10 +1,19 @@
 <script lang="ts">
+	import SpotlightCard from '$lib/components/svelte-bits/SpotlightCard.svelte';
+	import { isDarkMode } from '$lib/components/svelte-bits/theme';
 	export let title = '';
 	export let first = false;
 	export let className = '';
 </script>
 
-<section class="llmw-card {first ? '' : 'mt-5'} {className}">
+<SpotlightCard
+	class="llmw-card {first ? '' : 'mt-5'} {className}"
+	theme={$isDarkMode ? 'dark' : 'light'}
+	spotlightColor="rgba(139, 92, 246, 0.22)"
+	intensity={0.18}
+	spotlightSize={320}
+	borderGlow={0.8}
+>
 	{#if title}
 		<h3 class="llmw-section-title mb-2 text-xs text-base-400 dark:text-base-600">
 			{title}
@@ -14,4 +23,4 @@
 	<div class="llmw-card-body flex flex-col gap-2.5">
 		<slot />
 	</div>
-</section>
+</SpotlightCard>

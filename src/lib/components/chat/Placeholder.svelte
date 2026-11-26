@@ -28,7 +28,8 @@
 	import RecentChats from './RecentChats.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import GradientText from '$lib/components/svelte-bits/GradientText.svelte';
-	import { ACCENT_STOPS } from '$lib/components/svelte-bits/theme';
+	import { ACCENT_STOPS, isDarkMode } from '$lib/components/svelte-bits/theme';
+	import SplitFlapText from '$lib/components/svelte-bits/SplitFlapText.svelte';
 
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import MessageInput from './MessageInput.svelte';
@@ -267,8 +268,23 @@
 		>
 			<div class="w-full flex flex-col justify-center items-center">
 				{#if showGreeting}
-					<h2 class="px-5 max-w-xl mb-1 text-2xl line-clamp-1" in:fade={{ duration: 100 }}>
-						<GradientText colors={ACCENT_STOPS} animationSpeed={6}>{greeting}</GradientText>
+					<!-- llm-workspace: greeting clacks in like a departure board -->
+					<h2 class="px-5 max-w-full mb-2 flex justify-center overflow-hidden" in:fade={{ duration: 100 }}>
+						<span class="sr-only">{greeting}</span>
+						<SplitFlapText
+							text={greeting}
+							loop={false}
+							padTo={1}
+							align="center"
+							fontSize={22}
+							gap={3}
+							tileRadius={5}
+							flipsPerChar={6}
+							stagger={0.03}
+							tileColor={$isDarkMode ? '#1e1b4b' : '#ede9fe'}
+							textColor={$isDarkMode ? '#ede9fe' : '#4c1d95'}
+							aria-hidden="true"
+						/>
 					</h2>
 				{:else}
 					<div class="flex flex-row justify-center gap-2.5 @sm:gap-3 w-fit px-5 max-w-xl">

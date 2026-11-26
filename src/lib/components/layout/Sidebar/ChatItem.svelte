@@ -59,6 +59,7 @@
 
 	import ChatMenu from './ChatMenu.svelte';
 	import DeleteConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
+	import UndoToast from '$lib/components/llm-workspace/UndoToast.svelte';
 	import ShareChatModal from '$lib/components/chat/ShareChatModal.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import DragGhost from '$lib/components/common/DragGhost.svelte';
@@ -378,7 +379,23 @@
 
 	let archiving = false;
 
-	const archiveChatHandler = async (id) => {
+	// llm-workspace: archiving waits for a burning-fuse Undo window before it commits.
+	const archiveChatHandler = (id) => {
+		if (archived) return commitArchiveChat(id);
+		toast.custom(UndoToast, {
+			componentProps: {
+				message: $i18n.t('Archiving chat'),
+				actionLabel: $i18n.t('Archive'),
+				undoLabel: $i18n.t('Undo'),
+				doneLabel: $i18n.t('Archived'),
+				onCommit: () => commitArchiveChat(id)
+			},
+			duration: 6500,
+			unstyled: true
+		});
+	};
+
+	const commitArchiveChat = async (id) => {
 		if (archiving) return;
 		archiving = true;
 
@@ -677,6 +694,7 @@
 <ShareChatModal bind:show={showShareChatModal} chatId={id} />
 
 <DeleteConfirmDialog
+	holdToConfirm
 	bind:show={showDeleteConfirm}
 	title={$i18n.t('Delete chat?')}
 	on:confirm={() => {

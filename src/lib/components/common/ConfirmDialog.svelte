@@ -1,4 +1,6 @@
 <script lang="ts">
+	import HoldButton from '$lib/components/svelte-bits/HoldButton.svelte';
+	import { isDarkMode } from '$lib/components/svelte-bits/theme';
 	import DOMPurify from 'dompurify';
 
 	import { onMount, getContext, createEventDispatcher, onDestroy, tick } from 'svelte';
@@ -21,6 +23,8 @@
 	export let cancelLabel: string | undefined = undefined;
 	export let confirmLabel: string | undefined = undefined;
 	export let confirmFirst = false;
+	// llm-workspace: require press-and-hold to confirm (for destructive actions).
+	export let holdToConfirm = false;
 	export let primaryAction: 'confirm' | 'cancel' = 'confirm';
 
 	export let onConfirm = () => {};
@@ -87,7 +91,7 @@
 
 			event.preventDefault();
 			event.stopPropagation();
-			confirmHandler();
+			if (!holdToConfirm) confirmHandler();
 		}
 	};
 
@@ -221,6 +225,21 @@
 
 				<div class="mt-5 flex justify-between gap-1.5">
 					{#each confirmFirst ? ['confirm', 'cancel'] : ['cancel', 'confirm'] as action (action)}
+						{#if action === 'confirm' && holdToConfirm}
+							<HoldButton
+								children={confirmLabel ?? $i18n.t('Hold to delete')}
+								doneLabel={$i18n.t('Deleted')}
+								size="sm"
+								radius={8}
+								holdTime={1200}
+								backgroundColor={$isDarkMode ? '#3f1d2b' : '#fee2e2'}
+								fillColor="#ef4444"
+								textColor={$isDarkMode ? '#fecaca' : '#991b1b'}
+								fillTextColor="#ffffff"
+								onHold={confirmHandler}
+								className="w-full h-7 text-xs"
+							/>
+						{:else}
 						<button
 							class="flex h-7 w-full items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-normal transition disabled:opacity-60 {action ===
 							primaryAction
@@ -233,6 +252,7 @@
 								? (confirmLabel ?? $i18n.t('Confirm'))
 								: (cancelLabel ?? $i18n.t('Cancel'))}
 						</button>
+						{/if}
 					{/each}
 				</div>
 			</div>

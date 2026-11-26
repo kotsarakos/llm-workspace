@@ -18,6 +18,8 @@
 	import UserSettingRow from './UserSettingRow.svelte';
 	import UserSettingSection from './UserSettingSection.svelte';
 	import SettingsSelect from '$lib/components/common/SettingsSelect.svelte';
+	import GlideSelect from '$lib/components/svelte-bits/GlideSelect.svelte';
+	import { isDarkMode, ACCENT } from '$lib/components/svelte-bits/theme';
 	export let saveSettings: Function;
 	export let getModels: Function;
 
@@ -171,19 +173,29 @@
 				label={$i18n.t('settings.personal.general.theme.label')}
 				description={$i18n.t('settings.personal.general.theme.description')}
 			>
-				<SettingsSelect
-					bind:value={selectedTheme}
+				<!-- llm-workspace: animated menu that pops out of the chip -->
+				<GlideSelect
+					value={selectedTheme}
+					options={[
+						{ value: 'system', label: `⚙️ ${$i18n.t('System')}` },
+						{ value: 'dark', label: `🌑 ${$i18n.t('Dark')}` },
+						{ value: 'light', label: `☀️ ${$i18n.t('Light')}` },
+						...($config?.features?.enable_easter_eggs ? [{ value: 'her', label: '🌷 Her' }] : [])
+					]}
+					onChange={(value) => {
+						selectedTheme = value;
+						setTheme(value);
+					}}
 					ariaLabel={$i18n.t('settings.personal.general.theme.label')}
-					placeholder={$i18n.t('Select a theme')}
-					on:change={() => setTheme(selectedTheme)}
-				>
-					<option value="system">⚙️ {$i18n.t('System')}</option>
-					<option value="dark">🌑 {$i18n.t('Dark')}</option>
-					<option value="light">☀️ {$i18n.t('Light')}</option>
-					{#if $config?.features?.enable_easter_eggs}
-						<option value="her">🌷 Her</option>
-					{/if}
-				</SettingsSelect>
+					showTags={false}
+					size="sm"
+					align="right"
+					menuWidth={170}
+					accentColor={ACCENT.violet}
+					surfaceColor={$isDarkMode ? 'rgba(139, 92, 246, 0.12)' : 'rgba(139, 92, 246, 0.08)'}
+					highlightColor={$isDarkMode ? 'rgba(139, 92, 246, 0.28)' : 'rgba(139, 92, 246, 0.18)'}
+					textColor={$isDarkMode ? '#f4f4f5' : '#27272a'}
+				/>
 			</UserSettingRow>
 
 			{#if selectedTheme !== 'her'}
