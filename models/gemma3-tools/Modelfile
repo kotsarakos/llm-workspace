@@ -1,0 +1,60 @@
+# gemma3-tools: Gemma 3 with tool calling enabled in Ollama.
+#
+# The stock gemma3 template has no tool support, so Ollama rejects requests
+# that include tools ("does not support tools"). This template describes the
+# tools in the first user turn, asks the model to answer with a JSON function
+# call, and renders previous calls and their results. Ollama detects the
+# {{ .Tools }} section, reports the "tools" capability and parses the JSON
+# replies into structured tool calls.
+#
+# Build:  ollama create gemma3-tools -f models/gemma3-tools/Modelfile
+# (./start.sh does this automatically when gemma3:4b is installed.)
+
+FROM gemma3:4b
+
+TEMPLATE """{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 }}
+{{- if or (eq .Role "user") (eq .Role "system") }}<start_of_turn>user
+{{- if and $.Tools (eq $i 0) }}
+You are a helpful general assistant that can also run the functions listed below.
+- When the user asks you to do something one of these functions does, you MUST call it: reply with only the raw JSON line, never with ``` fences or any other text.
+- For questions and conversation, answer normally from your own knowledge.
+
+Functions:
+{{- range $.Tools }}
+- {{ .Function.Name }}: {{ .Function.Description }}
+{{- if .Function.Parameters.Properties }}
+  arguments: {{ range $k, $v := .Function.Parameters.Properties }}"{{ $k }}"{{ if $v.Enum }} (one of: {{ range $j, $e := $v.Enum }}{{ if $j }}, {{ end }}{{ $e }}{{ end }}){{ end }}{{ if $v.Description }} = {{ $v.Description }}{{ end }}; {{ end }}
+{{- else }}
+  no arguments, call it as: {"name": "{{ .Function.Name }}", "parameters": {}}
+{{- end }}
+{{- end }}
+
+Function call format (always include "parameters", even when it is {}):
+{"name": "function_name", "parameters": {"argument": "value"}}
+{{ end }}
+{{ .Content }}<end_of_turn>
+{{ if $last }}<start_of_turn>model
+{{ end }}
+{{- else if eq .Role "assistant" }}<start_of_turn>model
+{{- if .ToolCalls }}
+{{- range .ToolCalls }}
+{"name": "{{ .Function.Name }}", "parameters": {{ .Function.Arguments }}}
+{{- end }}
+{{- else }}
+{{ .Content }}
+{{- end }}{{ if not $last }}<end_of_turn>
+{{ end }}
+{{- else if eq .Role "tool" }}<start_of_turn>user
+Function result:
+{{ .Content }}<end_of_turn>
+{{ if $last }}<start_of_turn>model
+{{ end }}
+{{- end }}
+{{- end }}"""
+
+PARAMETER stop "<end_of_turn>"
+PARAMETER top_k 64
+PARAMETER top_p 0.95
+# Lower than the stock 1.0 so function calls are more consistent.
+PARAMETER temperature 0.4
