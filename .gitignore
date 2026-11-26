@@ -313,3 +313,7 @@ dist
 # Local temporary fixtures and screenshots
 /tmp/
 /artifacts/
+
+# llm-workspace
+workspace.env
+.run/
