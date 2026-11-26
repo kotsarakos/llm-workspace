@@ -1,4 +1,5 @@
 <script lang="ts">
+	import GradualBlur from '$lib/components/svelte-bits/GradualBlur.svelte';
 	import { getMachines } from '$lib/apis/machines';
 	import { resolveToolApprovalMode } from '$lib/utils/toolPermissions';
 	import type { AppLayoutContext, MachineContext } from '$lib/types';
@@ -6495,10 +6496,14 @@
 					{/if}
 					<div
 						id="chat-pane"
-						class="flex min-h-0 flex-col flex-auto z-10 w-full @container {embeddedCollapsed
+						class="relative flex min-h-0 flex-col flex-auto z-10 w-full @container {embeddedCollapsed
 							? 'overflow-visible'
 							: 'overflow-auto'}"
 					>
+						{#if !embedded}
+							<!-- llm-workspace: messages fade into a soft blur under the top bar -->
+							<GradualBlur position="top" target="parent" height="3.5rem" strength={1.5} layers={6} zIndex={20} />
+						{/if}
 						<div class="sr-only" aria-live="polite" aria-atomic="true">{liveStatus}</div>
 						{#if (!embedded && $settings?.landingPageMode === 'chat' && !$selectedFolder) || (!contextOnly && createMessagesList(history, history.currentId).length > 0)}
 							<div

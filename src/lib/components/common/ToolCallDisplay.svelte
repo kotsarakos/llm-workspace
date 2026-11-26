@@ -13,6 +13,8 @@
 	import ChevronUp from '../icons/ChevronUp.svelte';
 	import ChevronDown from '../icons/ChevronDown.svelte';
 	import Spinner from './Spinner.svelte';
+	import CallChip from '$lib/components/svelte-bits/CallChip.svelte';
+	import { isDarkMode, ACCENT } from '$lib/components/svelte-bits/theme';
 	import WrenchSolid from '../icons/WrenchSolid.svelte';
 	import CheckCircle from '../icons/CheckCircle.svelte';
 	import XMark from '../icons/XMark.svelte';
@@ -224,6 +226,28 @@
 			: null;
 
 	$: parsedArgs = parseArguments(args);
+
+	// llm-workspace: compact chip for ordinary tool calls (approvals and prompts keep their buttons).
+	$: useChip = !view && !needsInput && !needsApproval && !isRejected;
+	$: chipStatus = (isError ? 'error' : isDone ? 'done' : isActive ? 'running' : 'idle') as
+		| 'error'
+		| 'done'
+		| 'running'
+		| 'idle';
+	$: chipIcon = /search|find|query|lookup/i.test(toolName ?? '')
+		? 'search'
+		: /edit|write|update|create/i.test(toolName ?? '')
+			? 'edit'
+			: /file|read|open/i.test(toolName ?? '')
+				? 'file'
+				: 'terminal';
+	$: chipArgument = parsedArgs
+		? Object.values(parsedArgs)
+				.filter((v) => v !== null && v !== '' && typeof v !== 'object')
+				.map(String)
+				.join(' · ')
+				.slice(0, 60)
+		: '';
 	$: parsedResult = parseJSONString(result);
 
 	const toggleOpen = () => {
@@ -282,6 +306,23 @@
 					? 'shimmer'
 					: ''}"
 			>
+				{#if useChip}
+					<!-- llm-workspace: animated tool-call chip -->
+					<CallChip
+						icon={chipIcon}
+						name={toolName ?? ''}
+						argument={chipArgument}
+						status={chipStatus}
+						expectedMs={2500}
+						size={28}
+						radius={9}
+						color={$isDarkMode ? '#e4e4e7' : '#27272a'}
+						surfaceColor={$isDarkMode ? 'rgba(139, 92, 246, 0.14)' : 'rgba(139, 92, 246, 0.1)'}
+						progressColor={ACCENT.violet}
+						progressOpacity={0.35}
+						className="max-w-full"
+					/>
+				{:else}
 				<!-- Status icon -->
 				{#if isActive}
 					<div>
@@ -346,6 +387,7 @@
 						</span>
 					{/if}
 				</div>
+				{/if}
 
 				{#if needsApproval && !isAskUser}
 					<span class="flex gap-1 shrink-0">

@@ -100,7 +100,8 @@
 	import RichTextInput from '../common/RichTextInput.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 	import BorderGlow from '$lib/components/svelte-bits/BorderGlow.svelte';
-	import { isDarkMode, ACCENT_STOPS } from '$lib/components/svelte-bits/theme';
+	import SpecularButton from '$lib/components/svelte-bits/SpecularButton.svelte';
+	import { isDarkMode, ACCENT, ACCENT_STOPS } from '$lib/components/svelte-bits/theme';
 	import FileItem from '../common/FileItem.svelte';
 	import Image from '../common/Image.svelte';
 	import Spinner from '../common/Spinner.svelte';
@@ -3197,16 +3198,24 @@
 											<div class=" flex items-center">
 												<!-- Preserve the former upload label for i18n extraction: $i18n.t('Waiting for upload...') -->
 												<Tooltip content={$i18n.t('Send message')}>
-													<button
+													<!-- llm-workspace: glass send button with a specular rim that tracks the cursor -->
+													<SpecularButton
 														id={inputId === 'chat-input'
 															? 'send-message-button'
 															: `${inputId}-send-message-button`}
 														aria-label={$i18n.t('Send message')}
-														class="{!(prompt === '' && files.length === 0)
-															? 'bg-base-1000 text-base-0 hover:bg-base-900 dark:bg-base-0 dark:text-base-1000 dark:hover:bg-base-100 '
-															: 'text-base-0 bg-base-200 dark:text-base-900 dark:bg-base-700 disabled'} transition rounded-full p-[0.3125rem] self-center"
+														size="sm"
+														radius={999}
 														type="submit"
 														disabled={prompt === '' && files.length === 0}
+														baseColor={prompt === '' && files.length === 0 ? '#71717a' : ACCENT.violet}
+														tint={ACCENT.violet}
+														tintOpacity={prompt === '' && files.length === 0 ? 0.08 : 0.85}
+														textColor="#ffffff"
+														lineColor="#e9d5ff"
+														glow={1.2}
+														proximity={180}
+														className="px-[0.3125rem]! py-[0.3125rem]! self-center transition"
 													>
 														<svg
 															xmlns="http://www.w3.org/2000/svg"
@@ -3220,7 +3229,7 @@
 																clip-rule="evenodd"
 															/>
 														</svg>
-													</button>
+													</SpecularButton>
 												</Tooltip>
 											</div>
 										{/if}

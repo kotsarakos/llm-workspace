@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Orb from '$lib/components/svelte-bits/Orb.svelte';
+	import { isDarkMode, ACCENT } from '$lib/components/svelte-bits/theme';
 	import { config, settings, voiceCall, TTSWorker } from '$lib/stores';
 	import { onMount, tick, getContext, onDestroy, createEventDispatcher } from 'svelte';
 
@@ -1090,16 +1092,26 @@
 								/><circle class="spinner_qM83 spinner_ZTLf" cx="20" cy="12" r="3" /></svg
 							>
 						{:else}
+							<!-- llm-workspace: a living orb that swells with your voice -->
 							<div
 								class=" {rmsLevel * 100 > 4
-									? ' size-52'
+									? ' size-72'
 									: rmsLevel * 100 > 2
-										? 'size-48'
+										? 'size-68'
 										: rmsLevel * 100 > 1
-											? 'size-44'
-											: 'size-40'} transition-all rounded-full bg-cover bg-center bg-no-repeat"
-								style={`background-image: url('${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model?.id}&lang=${$i18n.language}&voice=true&v=${model?.info?.updated_at}');`}
-							/>
+											? 'size-64'
+											: 'size-60'} transition-all duration-300"
+							>
+								<Orb
+									colors={[ACCENT.violet, ACCENT.cyan, ACCENT.blue]}
+									backgroundColor={$isDarkMode ? '#000000' : '#ffffff'}
+									forceHoverState={rmsLevel * 100 > 1}
+									hoverIntensity={Math.min(2, 0.6 + rmsLevel * 40)}
+									speed={rmsLevel * 100 > 1 ? 1.6 : 0.8}
+									followCursor={false}
+									clickPulse={false}
+								/>
+							</div>
 						{/if}
 					{/if}
 				</button>

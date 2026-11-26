@@ -45,6 +45,9 @@
 	import ProfileImage from './ProfileImage.svelte';
 	import Image from '$lib/components/common/Image.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import LatticeLoader from '$lib/components/svelte-bits/LatticeLoader.svelte';
+	import Counter from '$lib/components/svelte-bits/Counter.svelte';
+	import { ACCENT } from '$lib/components/svelte-bits/theme';
 	import RateComment from './RateComment.svelte';
 	import WebSearchResults from './ResponseMessage/WebSearchResults.svelte';
 	import Sparkles from '$lib/components/layout/Sidebar/icons/Sparkles.svelte';
@@ -236,6 +239,14 @@
 	$: visibleResponseContent =
 		getOutputText(message.output) || removeAllDetails(message.content ?? '');
 	$: hasResponseContent = Boolean((message.content ?? '').trim() || message.output?.length);
+
+	// llm-workspace: generation speed shown under finished answers (Ollama models).
+	$: usageInfo = (message.usage ?? {}) as Record<string, unknown>;
+	$: speedTps = typeof usageInfo['response_token/s'] === 'number' ? (usageInfo['response_token/s'] as number) : null;
+	$: speedSecs =
+		typeof usageInfo['total_duration'] === 'number' && (usageInfo['total_duration'] as number) > 0
+			? (usageInfo['total_duration'] as number) / 1e9
+			: null;
 
 	let edit = false;
 	let editButtonElement: HTMLButtonElement;
@@ -1025,9 +1036,24 @@
 
 							{#if !compacting && !message.done && !message.error && (hasResponseContent || !hasVisibleStatus)}
 								<div class="text-[0.90625rem] leading-relaxed">
-									<span
-										class="inline-block w-[0.125rem] h-3.5 bg-base-400 dark:bg-base-500 ml-0.5 animate-cursor-pulse align-text-bottom"
-									></span>
+									{#if hasResponseContent}
+										<span
+											class="inline-block w-[0.125rem] h-3.5 bg-base-400 dark:bg-base-500 ml-0.5 animate-cursor-pulse align-text-bottom"
+										></span>
+									{:else}
+										<!-- llm-workspace: agent status while the model works on its first token -->
+										<LatticeLoader
+											label={$i18n.t('Thinking')}
+											pattern="orbit"
+											color={ACCENT.violet}
+											glow={true}
+											glowColor={ACCENT.violet}
+											cellSize={5}
+											gap={2}
+											fontSize={13}
+											className="text-base-500 dark:text-base-400"
+										/>
+									{/if}
 								</div>
 							{/if}
 
@@ -1299,6 +1325,25 @@
 											{/if}
 										</button>
 									</Tooltip>
+								{/if}
+
+								{#if message.done && speedTps !== null}
+									<!-- llm-workspace: live generation speed -->
+									<span
+										class="{isLastMessage
+											? 'visible'
+											: 'hover-reveal'} inline-flex h-7 shrink-0 items-center gap-1 px-1.5 text-xs text-base-500 dark:text-base-400 tabular-nums"
+										title={$i18n.t('Generation speed')}
+									>
+										<span class="text-violet-500" aria-hidden="true">⚡</span>
+										<Counter value={speedTps} decimals={1} fontSize={12} duration={0.9} />
+										<span>tok/s</span>
+										{#if speedSecs !== null}
+											<span class="opacity-50">·</span>
+											<Counter value={speedSecs} decimals={1} fontSize={12} duration={0.9} />
+											<span>s</span>
+										{/if}
+									</span>
 								{/if}
 
 								{#if Object.keys(message.usage ?? {}).some((key) => key !== 'incomplete') && $visibleControls['chat.usage']}

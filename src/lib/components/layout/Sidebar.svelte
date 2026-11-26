@@ -116,6 +116,7 @@
 	import CodeIcon from './Sidebar/icons/Code.svelte';
 	import EditPencilIcon from './Sidebar/icons/EditPencil.svelte';
 	import ShinyText from '$lib/components/svelte-bits/ShinyText.svelte';
+	import SpotifyMiniPlayer from '$lib/components/llm-workspace/SpotifyMiniPlayer.svelte';
 	import { isDarkMode, ACCENT } from '$lib/components/svelte-bits/theme';
 	import NotesIcon from './Sidebar/icons/Notes.svelte';
 	import SearchIcon from './Sidebar/icons/Search.svelte';
@@ -2124,6 +2125,7 @@
 						class=" sidebar-bg-gradient-to-t bg-linear-to-t from-base-50 dark:from-base-950 to-transparent from-50% pointer-events-none absolute inset-0 -z-10 -mt-6"
 					></div>
 					<div class="flex flex-col">
+						<SpotifyMiniPlayer />
 						{#if $user !== undefined && $user !== null}
 							<UserMenu
 								role={$user?.role}
