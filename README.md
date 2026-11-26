@@ -41,6 +41,15 @@ Every effect follows light/dark mode, pauses when off-screen or in a hidden tab,
 - Dropped 15 unused npm packages (~184 including transitive dependencies)
 - Removed upstream release and publishing pipelines that don't apply to this project
 
+### Local AI agent with MCP tools
+The local model can act on your computer through custom [MCP](https://modelcontextprotocol.io) servers in [`mcp-servers/`](mcp-servers/), connected automatically on start:
+
+| Server | Try asking |
+|---|---|
+| [Spotify](mcp-servers/spotify/) | "Open Spotify", "Pause the music", "Play Bohemian Rhapsody", "Restart this song", "What's playing?" |
+
+Built with the official MCP Python SDK over Streamable HTTP, with allowlisted actions, injection-safe inputs and unit tests. Works with any Spotify account; the optional Spotify Web API (PKCE login) adds search results and direct playback.
+
 ### Local-first by default
 - Runs in Docker, bound to `localhost` only
 - Uses your existing Ollama models; no data leaves your machine
@@ -56,6 +65,7 @@ Every effect follows light/dark mode, pauses when off-screen or in a hidden tab,
 | UI effects | Svelte Bits (WebGL2 shaders, canvas, CSS) |
 | Backend | Python, FastAPI |
 | Models | Ollama (local LLMs) and OpenAI-compatible APIs |
+| Agent tools | Model Context Protocol (MCP Python SDK), Spotify Web API (spotipy, PKCE) |
 | Deployment | Docker |
 
 ```
@@ -75,21 +85,24 @@ Browser ──► llm-workspace (Docker, localhost:3000)
   ollama pull qwen3:4b
   ```
 
+- [uv](https://docs.astral.sh/uv/) (runs the MCP servers): `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
 ### Run
 ```bash
 git clone https://github.com/kotsarakos/llm-workspace.git
 cd llm-workspace
-./docker-run.sh
+./start.sh
 ```
 
-Open **http://localhost:3000**. The first account you create becomes the administrator.
+`start.sh` checks the prerequisites, pulls the default model (`qwen3:4b`) on first run, starts the MCP servers, builds the image the first time and connects everything. Open **http://localhost:3000**; the first account you create becomes the administrator.
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `LLM_WORKSPACE_PORT` | `3000` | Port on localhost |
-| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Where Ollama is reachable from the container |
+| Command | What it does |
+|---|---|
+| `./start.sh` | Start everything |
+| `./stop.sh` | Stop everything (data is kept) |
+| `./start.sh --rebuild` | Rebuild the web UI from source, then start |
 
-Data (users, chats, settings) is stored in the Docker volume `llm-workspace-data` and survives rebuilds.
+Everything works with defaults. To change the port, model or connect the Spotify API: `cp workspace.env.example workspace.env` and edit it. Data (users, chats, settings) is stored in the Docker volume `llm-workspace-data` and survives rebuilds.
 
 ### Model tips
 Tools such as web search and memory are enabled by default and need a model that supports tool calling, for example `qwen3`, `llama3.1` or `llama3.2`. For models without tool support (e.g. `gemma3`), set **Admin Settings → Models → *model* → Advanced Params → Function Calling** to **Legacy**.
@@ -111,7 +124,9 @@ Custom work lives mainly in:
 | `src/app.css` (end of file) | Scoped settings-window design (`.llmw-settings`) |
 | `src/routes/auth/+page.svelte` | Sign-in page |
 | `src/routes/(app)/+layout.svelte` | App shell backdrop and effects |
-| `docker-run.sh` | Build-and-run script |
+| `mcp-servers/` | Custom MCP servers (one folder per server) |
+| `start.sh` / `stop.sh` | Start and stop everything |
+| `workspace.env.example` | All optional settings |
 
 ---
 
